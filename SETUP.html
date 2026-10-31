@@ -1,0 +1,19 @@
+<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>初期設定｜モノの居場所</title><link rel="stylesheet" href="./assets/style.css"><style>article{max-width:800px;margin:40px auto;padding:30px;background:white;border:1px solid #e2e8e1;border-radius:12px}h1{font-size:25px}h2{margin:30px 0 12px;font-size:19px}p,li{font-size:14px;line-height:1.9}ul,ol{padding-left:24px}pre{background:#f1f4ed;overflow:auto;padding:18px;border-radius:8px;font-size:13px}article a{color:#26634c;text-decoration:underline}code{font-size:13px}@media(max-width:600px){article{margin:15px;padding:20px}}</style><article>
+<p>モノの居場所 / 管理者向け</p><h1>GitHub PagesとSupabaseの初期設定</h1><p>HTMLを公開するGitHubと、データを保存するSupabaseを接続します。登録された利用者だけが備品を確認・更新できます。</p>
+<h2>1. Supabaseの保存先を作る</h2><p><a href="https://supabase.com/dashboard" target="_blank" rel="noopener">Supabaseの管理画面</a>にログインし、この備品管理用の新しいプロジェクトを作ります。名前は <code>festival-inventory</code> などにし、地域は日本に近い場所を選びます。プランと料金表示を確認し、データベースのパスワードは自分で管理してください。</p>
+<h2>2. データベースの設定を入れる</h2><p>左メニューの「SQL Editor」で新しいクエリを開き、<a href="./supabase/setup.sql" download>setup.sql</a>の全文を貼り付けてRunを押します。これは専用の新しいプロジェクトで一度だけ実行します。成功すると3つのテーブルと2つの関数が作られます。数量は0から始まります。</p>
+<h2>3. 利用者を登録する</h2><ol><li>Authentication → Users → Add user → Create new userで、使う人のメールアドレスとパスワードを設定します。パスワードは本人が設定・管理してください。</li><li>次のSQLのメールアドレスと表示名を実際の値に変更して、SQL Editorで実行します。</li></ol>
+<pre>insert into public.festival_members (user_id, display_name)
+select id, '運営メンバーの名前'
+from auth.users where lower(email) = lower('member@example.com')
+on conflict (user_id) do update
+set display_name = excluded.display_name, active = true;</pre><p>ユーザーを作るだけでは備品にはアクセスできません。このメンバー登録も必要です。利用者全員のSupabase管理アカウントは不要です。</p>
+<h2>4. config.jsに接続情報を設定する</h2><p>Supabaseのプロジェクト設定で「Project URL」と「Publishable key」を確認し、<code>config.js</code>の空欄に入れます。</p>
+<pre>window.FESTIVAL_CONFIG = {
+  supabaseUrl: "https://プロジェクトID.supabase.co",
+  supabasePublishableKey: "sb_publishable_から始まる公開用キー"
+};</pre><p>旧形式のanon keyも使えます。Secret key・service_role・データベースのパスワードはここに入れません。接続情報を変更しても再ビルドは不要です。</p>
+<h2>5. GitHubで公開する</h2><ol><li><a href="https://github.com/new" target="_blank" rel="noopener">GitHubの新規リポジトリ作成画面</a>から、文化祭サイトとは別のリポジトリを作ります。</li><li>ZIPを展開し、このフォルダーの中身をアップロードします。<code>index.html</code>がリポジトリの一番上になるようにします。</li><li>Settings → Pagesで、Sourceを「Deploy from a branch」、Branchを「main」、フォルダーを「/(root)」にしてSaveを押します。</li><li>表示された公開URLを開き、登録した利用者でログインします。</li></ol>
+<h2>6. 実際の個数を登録する</h2><p>場所・備品を追加し、各場所の「個数を設定」で初期個数を入れます。運んだあとは「移動を記録する」で両方の場所の個数が更新されます。別のスマホから同じ個数が表示されることも確認してください。</p>
+<h2>困ったとき</h2><ul><li>「保存先の設定を待っています」：config.jsのURLと公開用キーを確認します。</li><li>「メンバー未登録」：Authenticationのユーザーに加え、festival_membersの登録とactive=trueを確認します。</li><li>「関数が見つからない」：setup.sqlが最後まで成功したか、接続しているプロジェクトが正しいか確認します。</li><li>「ほかの人が更新しました」：最新の個数を見て、もう一度登録します。</li><li>パスワードを忘れた場合：運営管理者に連絡してください。</li></ul>
+<p><a href="./index.html">備品管理画面へ戻る</a></p></article></html>
