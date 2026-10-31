@@ -12,11 +12,11 @@ const actorSource=` actor=btrim(coalesce(p_request->>'actor',''));
  if jsonb_typeof(p_request->'actor') is distinct from 'string' or length(actor) not between 1 and 40 then
   raise sqlstate 'PT400' using message='担当者名を40文字以内で入力してください。'; end if;`;
 const actorReplacement=` if coalesce(auth.jwt()->'amr' @> '[{"method":"oauth"}]'::jsonb,false) then
-  actor=member.display_name;
+  actor='Googleログイン利用者';
+ elsif coalesce(auth.jwt()->'amr' @> '[{"method":"password"}]'::jsonb,false) then
+  actor='非常用ログイン利用者';
  else
-  actor=btrim(coalesce(p_request->>'actor',''));
-  if jsonb_typeof(p_request->'actor') is distinct from 'string' or length(actor) not between 1 and 40 then
-   raise sqlstate 'PT400' using message='担当者名を40文字以内で入力してください。'; end if;
+  raise sqlstate 'PT403' using message='許可された方法でログインし直してください。';
  end if;`;
 if(!functions.includes(actorSource))throw new Error('Actor source changed; review forced-name generation');
 functions=functions.replace(actorSource,actorReplacement);

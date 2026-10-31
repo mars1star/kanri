@@ -90,7 +90,8 @@ export default function Home() {
     if (!snapshot || !mode || busy) return;
     setBusy(true); setFormError("");
     const change: Change = mode === "place" || mode === "item" ? { type: mode, name, unit } : { type: mode, item, from, to, quantity: Number(quantity), note };
-    const body = pending.current || { id: crypto.randomUUID(), revision: formRevision.current ?? snapshot.revision, actor, change };
+    // Personal display names stay on this device. The server derives a generic audit label from the verified login method.
+    const body = pending.current || { id: crypto.randomUUID(), revision: formRevision.current ?? snapshot.revision, actor: "ログイン利用者", change };
     pending.current = body;
     try {
       await inventoryRequest(body);
@@ -160,7 +161,7 @@ export default function Home() {
     <dialog ref={dialog} onCancel={e => { e.preventDefault(); close(); }} onClick={e => { if (e.target === e.currentTarget) close(); }}>
       {mode && data && <form onSubmit={submit} className="modal-content"><div className="modal-heading"><span className="modal-icon">{mode === "transfer" ? <ArrowLeftRight/> : mode === "adjust" ? <ClipboardList/> : <Plus/>}</span><button type="button" className="icon-button" aria-label="閉じる" disabled={busy || uncertain} onClick={close}><X size={20}/></button></div><h2>{mode === "transfer" ? "移動を記録する" : mode === "adjust" ? "個数を設定する" : mode === "place" ? "場所を追加する" : "備品を追加する"}</h2><p className="modal-description">{mode === "transfer" ? "移動元と移動先の個数が、一度に更新されます。" : mode === "adjust" ? "最初の登録や、実際に数え直したときに。" : "後から見てわかりやすい名前をつけましょう。"}</p>
       <fieldset disabled={busy || uncertain}>
-        <label>記録する人<span className="required">必須</span><input value={actor} onChange={e => setActor(e.target.value)} placeholder="例：2年A組 山田" required maxLength={40} autoComplete="name" readOnly={googleUser}/>{googleUser&&<small className="locked-name">Googleアカウントの本名で固定されています</small>}</label>
+        <label>この端末での表示名<span className="required">必須</span><input value={actor} onChange={e => setActor(e.target.value)} placeholder="例：2年A組 山田" required maxLength={40} autoComplete="name" readOnly={googleUser}/><small className="locked-name">個人名はサーバーや履歴に保存されません</small></label>
         {(mode === "item" || mode === "place") ? <><label>{mode === "place" ? "場所の名前" : "備品の名前"}<input autoComplete="off" value={name} onChange={e => setName(e.target.value)} placeholder={mode === "place" ? "例：2年A組・中庭" : "例：長机・パイプ椅子"} maxLength={30} required/></label>{mode === "item" && <label>数える単位<input value={unit} onChange={e => setUnit(e.target.value)} placeholder="個・台・脚 など" required maxLength={5}/></label>}</> : <>
           <label>備品<select value={item} onChange={e => { setItem(e.target.value); if (mode === "adjust") setQuantity(String(countAt(data, from, e.target.value))); }}>{data.items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select></label>
           <div className={mode === "transfer" ? "route-fields" : ""}><label>{mode === "transfer" ? "移動元" : "場所"}<select value={from} onChange={e => { setFrom(e.target.value); if (mode === "adjust") setQuantity(String(countAt(data, e.target.value, item))); if (e.target.value === to) setTo(data.places.find(p => p.id !== e.target.value)?.id || ""); }}>{data.places.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{mode === "transfer" && <><ArrowRight size={18}/><label>移動先<select value={to} onChange={e => setTo(e.target.value)} required><option value="" disabled>選択してください</option>{data.places.filter(p => p.id !== from).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></>}</div>
