@@ -47,7 +47,7 @@ export default function Home() {
       if(epoch !== authEpoch.current) return;
       setSnapshot(old => !old || result.revision >= old.revision ? result : old);
       setLogin(false); setError(""); setUpdated(new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" }));
-    } catch (e) { if(epoch !== authEpoch.current)return; if(e instanceof ApiError && e.status===401){setLogin(true);setSignedIn(false);setSnapshot(null);setMode(null);setError('');} else setError(e instanceof Error ? e.message : "接続できません。再読み込みしてください。"); }
+    } catch (e) { if(epoch !== authEpoch.current)return; if(e instanceof ApiError && e.status===401){setLogin(true);setSignedIn(false);setSnapshot(null);setMode(null);setError('');} else {if(e instanceof ApiError && e.status===403){setSnapshot(null);setMode(null);}setError(e instanceof Error ? e.message : "接続できません。再読み込みしてください。");} }
     finally { refreshing.current = false; }
   }, []);
   useEffect(() => {
@@ -62,7 +62,7 @@ export default function Home() {
     if(!supabase)return;
     const {data}=supabase.auth.onAuthStateChange((event,session)=>{
       setSignedIn(!!session);setLogin(!session);
-      if(!session){authEpoch.current++;setSnapshot(null);setMode(null);}
+      if(!session){authEpoch.current++;setSnapshot(null);setMode(null);setError('');}
       else if(event==='SIGNED_IN')setTimeout(()=>void refresh(),0);
     });
     return ()=>data.subscription.unsubscribe();
@@ -131,7 +131,7 @@ export default function Home() {
       <main>
         <div className="page-heading"><div><p className="eyebrow">FESTIVAL INVENTORY</p><h1>{tab === "inventory" ? "備品のいま" : tab === "history" ? "移動・変更の履歴" : "場所と備品の設定"}<span className="heading-dot">.</span></h1><p>{tab === "inventory" ? "何が、どこに、いくつあるか。ひと目で確認。" : tab === "history" ? "誰が、いつ、何を変えたか。チームの記録をここに。" : "文化祭に合わせて、管理する場所と備品を追加。"}</p></div><button className="primary main-action" onClick={() => open("transfer")} disabled={!data}><ArrowLeftRight size={18}/>移動を記録する</button></div>
         {error && <div className="error-banner" role="alert"><span>{error}{snapshot && " 表示中の個数は最新でない可能性があります。"}</span><button className="small-button" onClick={() => void refresh()}>再読み込み</button></div>}
-        {(!configured || login) && <SignIn done={()=>void refresh()}/>}{configured && !data && !error && !login && <div className="loading">備品の情報を読み込んでいます…</div>}
+        {(!configured || login) && <SignIn/>}{configured && !data && !error && !login && <div className="loading">備品の情報を読み込んでいます…</div>}
         {data && tab === "inventory" && <>
           <section className="summary" aria-label="備品の合計">
             {data.items.slice(0, 3).map((i, n) => <div className={`stat stat-${n}`} key={i.id}><div className="stat-top"><span>{i.name}</span><Package size={19}/></div><div className="stat-number">{data.places.reduce((a, p) => a + countAt(data, p.id, i.id), 0).toLocaleString()}<small>{i.unit}</small></div><div className="stat-bottom">全場所の合計 <span>ALL LOCATIONS</span></div></div>)}

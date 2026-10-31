@@ -1,0 +1,64 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {PGlite} from '@electric-sql/pglite';
+
+test('Google allowlist protects both inventory RPCs',async t=>{
+ const db=new PGlite();
+ const uid='00000000-0000-4000-8000-000000000001';
+ const email='allowed@example.invalid';
+ await db.exec(`create role anon;create role authenticated;create schema auth;
+ create table auth.users(id uuid primary key,email text);
+ create table auth.identities(user_id uuid,provider text,identity_data jsonb);
+ create function auth.uid() returns uuid language sql as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ create function auth.jwt() returns jsonb language sql as $$select nullif(current_setting('request.jwt.claims',true),'')::jsonb$$;
+ insert into auth.users values('${uid}','${email}');`);
+ await db.exec(await readFile('supabase/setup.sql','utf8'));
+ // A legacy member must not bypass Google authentication after migration.
+ await db.exec(`insert into public.festival_members values('${uid}','旧メンバー',true);`);
+ await db.exec(await readFile('supabase/google-access.sql','utf8'));
+ await db.query('insert into public.festival_google_allowlist values($1,$2,true)',[email,'運営メンバー']);
+ const claims=async(method='oauth',address=email,user=uid)=>{
+  await db.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
+  await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({email:address,amr:[{method}],user_metadata:{email,email_verified:true,provider:'google'}})]);
+ };
+ const identity=async(provider='google',verified=true,address=email)=>{
+  await db.exec('reset role;delete from auth.identities');
+  await db.query('insert into auth.identities values($1,$2,$3)',[uid,provider,JSON.stringify({email:address,email_verified:verified})]);
+  await db.exec('set role authenticated');
+ };
+ const read=async()=> (await db.query('select public.festival_snapshot() as value')).rows[0].value;
+ const body={id:crypto.randomUUID(),revision:0,actor:'運営メンバー',change:{type:'adjust',item:'desk',from:'storage',quantity:2,note:'初期登録'}};
+ const write=async()=>db.query('select public.festival_change($1::jsonb)',[JSON.stringify(body)]);
+ const denied=async()=>{await assert.rejects(read,{code:'PT403'});await assert.rejects(write,{code:'PT403'});};
+ await t.test('未ログインは拒否',async()=>{
+  await assert.rejects(read,{code:'PT401'});
+ });
+ await t.test('自己申告メタデータでは許可されない',async()=>{
+  await claims();await db.exec('set role authenticated');await denied();
+ });
+ await t.test('他社のidentity、未確認メール、別メールは拒否',async()=>{
+  await identity('github');await denied();
+  await identity('google',false);await denied();
+  await identity('google',true,'other@example.invalid');await denied();
+ });
+ await t.test('旧メンバーとGoogle連携済みでもpassword/OTP/recoveryは拒否',async()=>{
+  await identity();
+  for(const method of ['password','otp','recovery']){await claims(method);await denied();}
+ });
+ await t.test('許可アドレスの確認済みGoogle identityとOAuthセッションで保存できる',async()=>{
+  await claims();const state=await read();assert.equal(state.user.name,'運営メンバー');
+  await write();assert.equal((await read()).data.counts.storage.desk,2);
+ });
+ await t.test('別メールのセッションは連携済みGoogle identityを借用できない',async()=>{
+  await claims('oauth','other@example.invalid');await denied();
+ });
+ await t.test('allowlist直接読取・自己追加・認証補助関数の直接実行を拒否',async()=>{
+  await claims();
+  for(const sql of ['select * from public.festival_google_allowlist',"insert into public.festival_google_allowlist values('x@example.invalid','x',true)",'select public.festival_google_member()'])await assert.rejects(()=>db.query(sql),{code:'42501'});
+ });
+ await t.test('allowlistの無効化で既存セッションも直ちに拒否',async()=>{
+  await db.exec('reset role;update public.festival_google_allowlist set active=false;set role authenticated');await denied();
+ });
+ await db.close();
+});
