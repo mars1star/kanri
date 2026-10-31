@@ -28,7 +28,7 @@ test('Google allowlist protects both inventory RPCs',async t=>{
   await db.exec('set role authenticated');
  };
  const read=async()=> (await db.query('select public.festival_snapshot() as value')).rows[0].value;
- const body={id:crypto.randomUUID(),revision:0,actor:'運営メンバー',change:{type:'adjust',item:'desk',from:'storage',quantity:2,note:'初期登録'}};
+ const body={id:crypto.randomUUID(),revision:0,actor:'書き換えた偽名',change:{type:'adjust',item:'desk',from:'storage',quantity:2,note:'初期登録'}};
  const write=async()=>db.query('select public.festival_change($1::jsonb)',[JSON.stringify(body)]);
  const denied=async()=>{await assert.rejects(read,{code:'PT403'});await assert.rejects(write,{code:'PT403'});};
  await t.test('未ログインは拒否',async()=>{
@@ -48,7 +48,7 @@ test('Google allowlist protects both inventory RPCs',async t=>{
  });
  await t.test('許可アドレスの確認済みGoogle identityとOAuthセッションで保存できる',async()=>{
   await claims();const state=await read();assert.equal(state.user.name,'運営メンバー');
-  await write();assert.equal((await read()).data.counts.storage.desk,2);
+  await write();const updated=await read();assert.equal(updated.data.counts.storage.desk,2);assert.equal(updated.history[0].actor,'運営メンバー');
  });
  await t.test('別メールのセッションは連携済みGoogle identityを借用できない',async()=>{
   await claims('oauth','other@example.invalid');await denied();
@@ -69,6 +69,9 @@ test('Google allowlist protects both inventory RPCs',async t=>{
  await t.test('非常用パスワードアカウントだけを許可',async()=>{
   await claims('password','festival-emergency@seiko.ac.jp');await db.exec('set role authenticated');
   assert.equal((await read()).user.name,'非常用アカウント');
+  const emergencyBody={id:crypto.randomUUID(),revision:1,actor:'非常時の入力名',change:{type:'adjust',item:'desk',from:'storage',quantity:3,note:'非常用テスト'}};
+  await db.query('select public.festival_change($1::jsonb)',[JSON.stringify(emergencyBody)]);
+  assert.equal((await read()).history[0].actor,'非常時の入力名');
   await claims('password','other@example.invalid');await denied();
   await claims('otp','festival-emergency@seiko.ac.jp');await denied();
  });

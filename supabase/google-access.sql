@@ -67,9 +67,13 @@ begin
  exception when others then raise sqlstate 'PT400' using message='登録IDまたは更新番号が正しくありません。'; end;
  if request_id is null or expected is null or expected<0 or jsonb_typeof(p_request->'revision') is distinct from 'number' then
   raise sqlstate 'PT400' using message='更新番号を確認してください。'; end if;
- actor=btrim(coalesce(p_request->>'actor',''));
- if jsonb_typeof(p_request->'actor') is distinct from 'string' or length(actor) not between 1 and 40 then
-  raise sqlstate 'PT400' using message='担当者名を40文字以内で入力してください。'; end if;
+ if coalesce(auth.jwt()->'amr' @> '[{"method":"oauth"}]'::jsonb,false) then
+  actor=member.display_name;
+ else
+  actor=btrim(coalesce(p_request->>'actor',''));
+  if jsonb_typeof(p_request->'actor') is distinct from 'string' or length(actor) not between 1 and 40 then
+   raise sqlstate 'PT400' using message='担当者名を40文字以内で入力してください。'; end if;
+ end if;
  change=p_request->'change'; kind=change->>'type';
  if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer') then
   raise sqlstate 'PT400' using message='操作が正しくありません。'; end if;

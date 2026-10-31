@@ -8,5 +8,23 @@ for(const lock of ['', ' for share']) {
  functions=functions.replace(old,' member=public.festival_google_member();');
 }
 functions=functions.replaceAll('create function public.','create or replace function public.');
+const actorSource=` actor=btrim(coalesce(p_request->>'actor',''));
+ if jsonb_typeof(p_request->'actor') is distinct from 'string' or length(actor) not between 1 and 40 then
+  raise sqlstate 'PT400' using message='担当者名を40文字以内で入力してください。'; end if;`;
+const actorReplacement=` if coalesce(auth.jwt()->'amr' @> '[{"method":"oauth"}]'::jsonb,false) then
+  actor=member.display_name;
+ else
+  actor=btrim(coalesce(p_request->>'actor',''));
+  if jsonb_typeof(p_request->'actor') is distinct from 'string' or length(actor) not between 1 and 40 then
+   raise sqlstate 'PT400' using message='担当者名を40文字以内で入力してください。'; end if;
+ end if;`;
+if(!functions.includes(actorSource))throw new Error('Actor source changed; review forced-name generation');
+functions=functions.replace(actorSource,actorReplacement);
 const header=await readFile('supabase/google-access-header.sql','utf8');
 await writeFile('supabase/google-access.sql',header+'\n'+functions);
+const changeStart=functions.indexOf('create or replace function public.festival_change');
+const changeEnd=functions.indexOf('\nend $$;',changeStart)+9;
+if(changeStart<0||changeEnd<9)throw new Error('Could not extract festival_change');
+const forcedActor=functions.slice(changeStart,changeEnd)+`\nrevoke all on function public.festival_change(jsonb) from public,anon;\n`+
+ `grant execute on function public.festival_change(jsonb) to authenticated;\n`;
+await writeFile('supabase/google-forced-actor.sql',forcedActor);
