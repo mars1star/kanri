@@ -5,8 +5,11 @@
 
 ## 現在の状態
 
-HTML・CSS・JavaScript、編集用ソース、Supabase設定SQLは作成済みです。
-`config.js` の接続先が空の場合は未接続です。「保存先の設定を待っています」と表示されます。
+公開サイト: https://mars1star.github.io/kanri/
+
+Supabase「管理システム」（`gdcnocxixkrqeqlkwwea`）への接続情報は設定済みで、保存用テーブル・更新関数も作成済みです。
+このプロジェクトでは `supabase/setup.sql` を再実行する必要はありません。利用者はAuthenticationと `festival_members` の両方に登録します。
+新しいプロジェクトに複製する場合は、以下の初期設定を行い、`config.js` の接続情報を変更してください。
 表示中のSites版とは別のシステムです。元のデータを上書きしたり、自動移行したりしません。
 
 ## 最初の設定
