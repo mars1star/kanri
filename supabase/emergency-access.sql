@@ -28,7 +28,10 @@ begin
   and i.identity_data->'email_verified'='true'::jsonb and a.active
   and lower(auth.jwt()->>'email')=a.email limit 1 for share of a;
   if not found then raise sqlstate 'PT403' using message='このGoogleアカウントは利用を許可されていません。'; end if;
-  member.user_id=auth.uid(); member.display_name=google_allowed.display_name; member.active=true;
+  member.user_id=auth.uid();
+  select left(btrim(coalesce(i.identity_data->>'full_name',i.identity_data->>'name',google_allowed.display_name)),40)
+  into member.display_name from auth.identities i where i.user_id=auth.uid() and i.provider='google' limit 1;
+  member.active=true;
   return member;
  end if;
  if coalesce(auth.jwt()->'amr' @> '[{"method":"password"}]'::jsonb,false) then

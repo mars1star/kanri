@@ -10,6 +10,7 @@ export default function SignIn() {
  const [busy,setBusy]=useState(false);
  const [emergency,setEmergency]=useState(false);
  const [emergencyId,setEmergencyId]=useState('');
+ const [displayName,setDisplayName]=useState('');
  const [password,setPassword]=useState('');
  async function signIn(){
   if(!supabase||busy)return;
@@ -29,9 +30,13 @@ export default function SignIn() {
   if(emergencyId.trim().toLowerCase()!=='emergency'){
    setError('非常用IDまたはパスワードが違います。');return;
   }
+  const name=displayName.trim();
+  if(!name){setError('表示名を入力してください。');return;}
   setBusy(true);setError('');
   const {error}=await supabase.auth.signInWithPassword({email:'festival-emergency@seiko.ac.jp',password});
-  if(error){setError('非常用IDまたはパスワードが違います。');setBusy(false);}
+  if(error){setError('非常用IDまたはパスワードが違います。');setBusy(false);return;}
+  try{localStorage.setItem('festival-actor',name);}catch{}
+  window.location.reload();
  }
  return <section className="signin-card">
   <div className="brand-icon"><Boxes size={26}/></div>
@@ -45,6 +50,7 @@ export default function SignIn() {
    {!emergency?<button type="button" className="small-button emergency-toggle" onClick={()=>setEmergency(true)}>IDとパスワードでログイン</button>:
    <form className="emergency-form" onSubmit={emergencySignIn}>
     <label>非常用ID<input value={emergencyId} onChange={e=>setEmergencyId(e.target.value)} autoComplete="username" required/></label>
+    <label>表示名<input value={displayName} onChange={e=>setDisplayName(e.target.value)} autoComplete="name" maxLength={40} placeholder="例：2年A組 山田" required/></label>
     <label>パスワード<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password" required/></label>
     <button className="primary submit" disabled={busy}>{busy?'確認しています…':'非常用アカウントでログイン'}</button>
     <button type="button" className="text-button emergency-cancel" onClick={()=>{setEmergency(false);setError('');}}>戻る</button>

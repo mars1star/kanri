@@ -24,7 +24,7 @@ test('Google allowlist protects both inventory RPCs',async t=>{
  };
  const identity=async(provider='google',verified=true,address=email)=>{
   await db.exec('reset role;delete from auth.identities');
-  await db.query('insert into auth.identities values($1,$2,$3)',[uid,provider,JSON.stringify({email:address,email_verified:verified})]);
+  await db.query('insert into auth.identities values($1,$2,$3)',[uid,provider,JSON.stringify({email:address,email_verified:verified,full_name:'Google 本名'})]);
   await db.exec('set role authenticated');
  };
  const read=async()=> (await db.query('select public.festival_snapshot() as value')).rows[0].value;
@@ -62,6 +62,10 @@ test('Google allowlist protects both inventory RPCs',async t=>{
  });
  await db.exec('reset role');
  await db.exec(await readFile('supabase/emergency-access.sql','utf8'));
+ await t.test('Googleプロフィールの本名を表示名に使う',async()=>{
+  await db.exec('update public.festival_google_allowlist set active=true');
+  await claims();await identity();assert.equal((await read()).user.name,'Google 本名');
+ });
  await t.test('非常用パスワードアカウントだけを許可',async()=>{
   await claims('password','festival-emergency@seiko.ac.jp');await db.exec('set role authenticated');
   assert.equal((await read()).user.name,'非常用アカウント');

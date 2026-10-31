@@ -46,6 +46,10 @@ export default function Home() {
       const result = await inventoryRequest() as Snapshot;
       if(epoch !== authEpoch.current) return;
       setSnapshot(old => !old || result.revision >= old.revision ? result : old);
+      if(result.user.name!=='非常用アカウント'){
+        setActor(result.user.name);
+        try { localStorage.setItem('festival-actor',result.user.name); } catch {}
+      }
       setLogin(false); setError(""); setUpdated(new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" }));
     } catch (e) { if(epoch !== authEpoch.current)return; if(e instanceof ApiError && e.status===401){setLogin(true);setSignedIn(false);setSnapshot(null);setMode(null);setError('');} else {if(e instanceof ApiError && e.status===403){setSnapshot(null);setMode(null);}setError(e instanceof Error ? e.message : "接続できません。再読み込みしてください。");} }
     finally { refreshing.current = false; }
