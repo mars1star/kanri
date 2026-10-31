@@ -60,5 +60,16 @@ test('Google allowlist protects both inventory RPCs',async t=>{
  await t.test('allowlistの無効化で既存セッションも直ちに拒否',async()=>{
   await db.exec('reset role;update public.festival_google_allowlist set active=false;set role authenticated');await denied();
  });
+ await db.exec('reset role');
+ await db.exec(await readFile('supabase/emergency-access.sql','utf8'));
+ await t.test('非常用パスワードアカウントだけを許可',async()=>{
+  await claims('password','festival-emergency@seiko.ac.jp');await db.exec('set role authenticated');
+  assert.equal((await read()).user.name,'非常用アカウント');
+  await claims('password','other@example.invalid');await denied();
+  await claims('otp','festival-emergency@seiko.ac.jp');await denied();
+ });
+ await t.test('非常用allowlistの直接読取を拒否',async()=>{
+  await assert.rejects(()=>db.query('select * from public.festival_emergency_allowlist'),{code:'42501'});
+ });
  await db.close();
 });

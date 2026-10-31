@@ -16,7 +16,7 @@ export async function inventoryRequest(body?:unknown) {
   const {data,error,status}=await rpc.abortSignal(AbortSignal.timeout(20000));
   if(error) {
     const code=error.code?.startsWith('PT')?Number(error.code.slice(2)):status;
-    const message=code===401?'ログインの有効期限が切れました。もう一度ログインしてください。':code===403?'このアカウントでは利用できません。許可されたGoogleアカウントでログインし直してください。':(code>=500||!code)?'保存先に接続できません。時間をおいて再試行してください。':error.message;
+    const message=code===401?'ログインの有効期限が切れました。もう一度ログインしてください。':code===403?'このアカウントでは利用できません。許可されたアカウントでログインし直してください。':(code>=500||!code)?'保存先に接続できません。時間をおいて再試行してください。':error.message;
     throw new ApiError(message,code||503);
   }
   return data;
