@@ -62,6 +62,7 @@ test('Google allowlist protects both inventory RPCs',async t=>{
  });
  await db.exec('reset role');
  await db.exec(await readFile('supabase/emergency-access.sql','utf8'));
+ await db.exec(await readFile('supabase/presence.sql','utf8'));
  await t.test('Googleプロフィールの本名を表示名に使う',async()=>{
   await db.exec('update public.festival_google_allowlist set active=true');
   await claims();await identity();assert.equal((await read()).user.name,'Google 本名');
@@ -77,6 +78,12 @@ test('Google allowlist protects both inventory RPCs',async t=>{
  });
  await t.test('非常用allowlistの直接読取を拒否',async()=>{
   await assert.rejects(()=>db.query('select * from public.festival_emergency_allowlist'),{code:'42501'});
+ });
+ await t.test('ログイン中の利用者だけを安全に表示',async()=>{
+  await claims();await identity();
+  const online=(await db.query('select public.festival_presence() as value')).rows[0].value;
+  assert.equal(online.length,1);assert.equal(online[0].name,'Google 本名');assert.equal(online[0].method,'google');
+  await assert.rejects(()=>db.query('select * from public.festival_presence_state'),{code:'42501'});
  });
  await t.test('目標数を保存し、個数が残る備品を保護してから安全に削除',async()=>{
   await claims();await identity();

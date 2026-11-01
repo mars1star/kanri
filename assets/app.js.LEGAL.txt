@@ -86,6 +86,7 @@ lucide-react/dist/esm/icons/search.mjs:
 lucide-react/dist/esm/icons/settings-2.mjs:
 lucide-react/dist/esm/icons/target.mjs:
 lucide-react/dist/esm/icons/trash.mjs:
+lucide-react/dist/esm/icons/users.mjs:
 lucide-react/dist/esm/icons/x.mjs:
 lucide-react/dist/esm/lucide-react.mjs:
   /**

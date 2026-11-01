@@ -21,3 +21,9 @@ export async function inventoryRequest(body?:unknown) {
   }
   return data;
 }
+export async function presenceRequest() {
+  if(!supabase) throw new ApiError('保存先が未設定です。',503);
+  const {data,error,status}=await supabase.rpc('festival_presence').abortSignal(AbortSignal.timeout(10000));
+  if(error) throw new ApiError(error.message,status||503);
+  return data;
+}

@@ -1,11 +1,12 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
-import { ArrowDownToLine, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronLeft, ChevronRight, Clock3, ClipboardList, LayoutGrid, MapPin, Package, Plus, RefreshCw, Search, Settings2, Target, Trash2, UserCircle, X } from "lucide-react";
+import { ArrowDownToLine, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronLeft, ChevronRight, Clock3, ClipboardList, LayoutGrid, MapPin, Package, Plus, RefreshCw, Search, Settings2, Target, Trash2, UserCircle, Users, X } from "lucide-react";
 import { countAt, type Change, type Detail, type Inventory } from "./inventory";
-import { ApiError, configured, inventoryRequest, supabase } from './api';
+import { ApiError, configured, inventoryRequest, presenceRequest, supabase } from './api';
 import SignIn from './SignIn';
 
 type Snapshot = { data: Inventory; revision: number; history: { id: string; actor: string; detail: Detail; at: string }[]; user: { name: string; email: string } };
+type OnlineUser = { id: string; name: string; method: string; seenAt: string };
 type Mode = "transfer" | "adjust" | "place" | "item" | "target" | "targets";
 type RequestBody = { id: string; revision: number; actor: string; change: Change };
 const formatTime = (value: string) => new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Tokyo" }).format(new Date(value));
@@ -22,6 +23,7 @@ export default function Home() {
   const [login, setLogin] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   const [googleUser, setGoogleUser] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const authEpoch = useRef(0);
   const [updated, setUpdated] = useState("");
   const [toast, setToast] = useState("");
@@ -54,6 +56,7 @@ export default function Home() {
       const result = await inventoryRequest() as Snapshot;
       if(epoch !== authEpoch.current) return;
       setSnapshot(old => !old || result.revision >= old.revision ? result : old);
+      try { setOnlineUsers(await presenceRequest() as OnlineUser[]); } catch {}
       if(result.user.name!=='非常用アカウント'){
         setActor(result.user.name);
         try { localStorage.setItem('festival-actor',result.user.name); } catch {}
@@ -74,7 +77,7 @@ export default function Home() {
     if(!supabase)return;
     const {data}=supabase.auth.onAuthStateChange((event,session)=>{
       setSignedIn(!!session);setLogin(!session);setGoogleUser(session?.user.app_metadata?.provider==='google');
-      if(!session){authEpoch.current++;setSnapshot(null);setMode(null);setError('');setGoogleUser(false);}
+      if(!session){authEpoch.current++;setSnapshot(null);setOnlineUsers([]);setMode(null);setError('');setGoogleUser(false);}
       else if(event==='SIGNED_IN')setTimeout(()=>void refresh(),0);
     });
     return ()=>data.subscription.unsubscribe();
@@ -150,14 +153,15 @@ export default function Home() {
         <button className={tab === "inventory" ? "selected" : ""} onClick={() => setTab("inventory")}><LayoutGrid size={19}/>備品のいま<ChevronRight size={15}/></button>
         <button className={tab === "history" ? "selected" : ""} onClick={() => setTab("history")}><Clock3 size={19}/>移動・変更の履歴</button>
         <button className={tab === "settings" ? "selected" : ""} onClick={() => setTab("settings")}><Settings2 size={19}/>場所と備品の設定</button>
+        <button className={tab === "online" ? "selected" : ""} onClick={() => setTab("online")}><Users size={19}/>ログイン中{onlineUsers.length>0&&<span className="online-count">{onlineUsers.length}</span>}</button>
         <button className={tab === "profile" ? "selected" : ""} onClick={() => setTab("profile")}><UserCircle size={19}/>プロフィール</button>
       </nav>
       <div className="sidebar-bottom"><span className="avatar">祭</span><span>文化祭 備品管理</span></div>
     </aside>
     <div className="main-wrap">
-      <header className="topbar"><span><b>{tab === "inventory" ? "備品" : tab === "history" ? "履歴" : tab === "settings" ? "設定" : "プロフィール"}</b></span><div className={`sync ${error ? "offline" : ""}`}><i/>{error ? "接続エラー" : snapshot ? "同期中" : "ログイン前"}</div>{signedIn && <button className="profile-shortcut" onClick={() => setTab("profile")}><UserCircle size={18}/>{snapshot?.user.name}</button>}</header>
+      <header className="topbar"><span><b>{tab === "inventory" ? "備品" : tab === "history" ? "履歴" : tab === "settings" ? "設定" : tab === "online" ? "ログイン中" : "プロフィール"}</b></span><div className={`sync ${error ? "offline" : ""}`}><i/>{error ? "接続エラー" : snapshot ? "同期中" : "ログイン前"}</div>{signedIn && <button className="profile-shortcut" onClick={() => setTab("profile")}><UserCircle size={18}/>{snapshot?.user.name}</button>}</header>
       <main>
-        <div className="page-heading"><div><h1>{tab === "inventory" ? "備品管理" : tab === "history" ? "変更履歴" : tab === "settings" ? "場所・備品の設定" : "プロフィール"}</h1></div>{tab === "inventory" && <div className="main-actions"><button className="small-button initial-count-button" onClick={() => open("adjust")} disabled={!data}><ClipboardList size={18}/>初期個数を登録</button><button className="primary main-action" onClick={() => open("transfer")} disabled={!data}><ArrowLeftRight size={18}/>移動を記録</button></div>}</div>
+        <div className="page-heading"><div><h1>{tab === "inventory" ? "備品管理" : tab === "history" ? "変更履歴" : tab === "settings" ? "場所・備品の設定" : tab === "online" ? "ログイン中の利用者" : "プロフィール"}</h1></div>{tab === "inventory" && <div className="main-actions"><button className="small-button initial-count-button" onClick={() => open("adjust")} disabled={!data}><ClipboardList size={18}/>初期個数を登録</button><button className="primary main-action" onClick={() => open("transfer")} disabled={!data}><ArrowLeftRight size={18}/>移動を記録</button></div>}</div>
         {error && <div className="error-banner" role="alert"><span>{error}{snapshot && " 表示中の個数は最新でない可能性があります。"}</span><button className="small-button" onClick={() => void refresh()}>再読み込み</button></div>}
         {(!configured || login) && <SignIn/>}{configured && !data && !error && !login && <div className="loading">備品の情報を読み込んでいます…</div>}
         {data && tab === "inventory" && <>
@@ -177,6 +181,7 @@ export default function Home() {
         </>}
         {data && tab === "history" && <section className="history-full"><div className="section-heading"><h2>チームの活動記録</h2><span className="muted">最新100件を表示</span></div><History entries={snapshot!.history}/></section>}
         {data && tab === "settings" && <div className="settings-grid"><section className="settings-panel"><div className="section-heading"><h2><MapPin size={20}/>管理する場所</h2><button className="small-button" onClick={() => open("place")}><Plus size={16}/>追加</button></div><label className="search settings-search"><Search size={16}/><input value={settingsPlaceQuery} onChange={e=>setSettingsPlaceQuery(e.target.value)} placeholder="場所を検索"/></label><div className="settings-list">{data.places.filter(p=>p.name.includes(settingsPlaceQuery)).map(p => <div className="setting-row" key={p.id}><span>{p.name}</span><button className="danger-icon" disabled={busy} onClick={()=>{if(confirm(`${p.name}を削除しますか？`))void quickChange({type:'delete_place',from:p.id},'場所を削除しました。')}} aria-label={`${p.name}を削除`}><Trash2 size={17}/></button></div>)}</div></section><section className="settings-panel"><div className="section-heading"><h2><Package size={20}/>管理する備品</h2><span className="setting-head-actions"><button className="small-button" onClick={()=>open('targets')}><Target size={16}/>目標をまとめて設定</button><button className="small-button" onClick={() => open("item")}><Plus size={16}/>追加</button></span></div><label className="search settings-search"><Search size={16}/><input value={settingsItemQuery} onChange={e=>setSettingsItemQuery(e.target.value)} placeholder="備品を検索"/></label><div className="settings-list">{data.items.filter(i=>i.name.includes(settingsItemQuery)).map(i => <div className="setting-row" key={i.id}><span><b>{i.name}</b><small>{i.unit}</small></span><span className="setting-actions"><button onClick={()=>open('target',data.places[0]?.id,i.id)}><Target size={16}/>目標</button><button className="danger-icon" disabled={busy} onClick={()=>{if(confirm(`${i.name}を削除しますか？`))void quickChange({type:'delete_item',item:i.id},'備品を削除しました。')}} aria-label={`${i.name}を削除`}><Trash2 size={17}/></button></span></div>)}</div></section></div>}
+        {data && tab === "online" && <section className="online-panel"><div className="online-summary"><span className="online-pulse"/><strong>{onlineUsers.length}人がログイン中</strong><button className="small-button" onClick={()=>void refresh()}><RefreshCw size={16}/>更新</button></div><div className="online-list">{onlineUsers.map(user=><div className="online-user" key={user.id}><span className="online-avatar"><UserCircle size={24}/></span><div><strong>{user.name}</strong><p>{user.method==='google'?'Google学校アカウント':'非常用アカウント'}</p></div><time dateTime={user.seenAt}>オンライン</time></div>)}</div><p className="online-note">画面を閉じた利用者は約2分後に一覧から消えます。</p></section>}
         {data && tab === "profile" && <section className="profile-card"><span className="profile-avatar"><UserCircle size={42}/></span><div><h2>{snapshot?.user.name}</h2><p>{googleUser?'Google学校アカウント':'非常用アカウント'}</p></div><dl><div><dt>権限</dt><dd>在庫の閲覧・更新</dd></div><div><dt>最終同期</dt><dd>{updated||'確認中'}</dd></div></dl><button className="danger-outline" onClick={async()=>{const r=await supabase?.auth.signOut({scope:'local'});if(r?.error)setError('ログアウトできませんでした。');}}>ログアウト</button></section>}
         <footer>文化祭 備品管理</footer>
       </main>
