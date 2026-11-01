@@ -43,6 +43,7 @@ export default function Home() {
   const formRevision = useRef<number | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
   const carousel = useRef<HTMLDivElement>(null);
+  const summaryCarousel = useRef<HTMLElement>(null);
   const refreshing = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -160,9 +161,9 @@ export default function Home() {
         {error && <div className="error-banner" role="alert"><span>{error}{snapshot && " 表示中の個数は最新でない可能性があります。"}</span><button className="small-button" onClick={() => void refresh()}>再読み込み</button></div>}
         {(!configured || login) && <SignIn/>}{configured && !data && !error && !login && <div className="loading">備品の情報を読み込んでいます…</div>}
         {data && tab === "inventory" && <>
-          <div className="section-heading item-summary-heading"><h2>備品の合計</h2><label className="search compact-search"><Search size={17}/><input aria-label="備品を検索" value={itemQuery} onChange={e=>setItemQuery(e.target.value)} placeholder="備品を検索"/></label></div>
-          <section className="summary" aria-label="備品の合計">
-            {data.items.filter(i=>i.name.includes(itemQuery)).map((i, n) => { const diff=differenceFor(i.id), target=totalTargetFor(i.id); return <button className={`stat stat-${n%3}`} key={i.id} onClick={() => setOverviewItem(i.id)}><div className="stat-top"><span>{i.name}</span><Package size={19}/></div><div className="stat-number">{totalFor(i.id).toLocaleString()}<small>{i.unit}</small></div><div className="target-line"><span>各場所の目標合計 {target}{i.unit}</span>{target>0&&<b className={diff>0?'over':diff<0?'short':'just'}>{diff>0?`+${diff} 超過`:diff<0?`${Math.abs(diff)} 不足`:'達成'}</b>}</div></button>})}
+          <div className="section-heading item-summary-heading"><h2>備品の合計</h2><div className="summary-tools"><button onClick={()=>summaryCarousel.current?.scrollBy({left:-summaryCarousel.current.clientWidth,behavior:'smooth'})} aria-label="前の備品"><ChevronLeft/></button><button onClick={()=>summaryCarousel.current?.scrollBy({left:summaryCarousel.current.clientWidth,behavior:'smooth'})} aria-label="次の備品"><ChevronRight/></button><label className="search compact-search"><Search size={17}/><input aria-label="備品を検索" value={itemQuery} onChange={e=>setItemQuery(e.target.value)} placeholder="備品を検索"/></label></div></div>
+          <section className="summary" aria-label="備品の合計" ref={summaryCarousel}>
+            {data.items.filter(i=>i.name.includes(itemQuery)).map((i, n) => { const diff=differenceFor(i.id), target=totalTargetFor(i.id); return <button className={`stat stat-${n%3}`} key={i.id} onClick={() => setOverviewItem(i.id)}><div className="stat-top"><span>{i.name}</span><Package size={19}/></div><div className="stat-number">{totalFor(i.id).toLocaleString()}<small>{i.unit}</small></div><div className="target-line"><span className="summary-target">目標 <strong>{target}</strong>{i.unit}</span>{target>0&&<b className={diff>0?'over':diff<0?'short':'just'}>{diff>0?`+${diff} 超過`:diff<0?`${Math.abs(diff)} 不足`:'達成'}</b>}</div></button>})}
             <button className="stat places-stat" onClick={() => setTab("settings")}><div className="stat-top"><span>場所</span><MapPin size={19}/></div><div className="stat-number">{data.places.length}<small>か所</small></div><div className="target-line">設定を開く <ArrowRight size={15}/></div></button>
           </section>
           {snapshot?.revision === 0 && <div className="setup-banner"><span className="setup-icon"><ClipboardList size={23}/></span><div><strong>最初に、いまある個数を登録しましょう。</strong><p>場所と備品は仮の名前です。設定から追加でき、個数は各カードの「個数を設定」から登録できます。</p></div><button className="small-button" onClick={() => open("adjust")}>はじめる <ArrowRight size={15}/></button></div>}
