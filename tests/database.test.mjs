@@ -34,10 +34,9 @@ test('Supabase schema and access rules on PostgreSQL',async t=>{
   assert.equal(results.find(r=>r.status==='rejected').reason.code,'PT409');
   const state=await read();assert.equal(state.revision,3);assert.equal(state.data.counts.storage.desk,14);assert.equal(state.data.counts.gym.desk,6);
  });
- await t.test('不足・負数・小数・同じ場所・理由なしを拒否',async()=>{
+ await t.test('不足・負数・小数・同じ場所を拒否',async()=>{
   for(const quantity of [-1,0,1.5,99999,'1',null]) await assert.rejects(()=>write(request(3,{type:'transfer',item:'desk',from:'storage',to:'gym',quantity})),{code:'PT400'});
   await assert.rejects(()=>write(request(3,{type:'transfer',item:'desk',from:'storage',to:'storage',quantity:1})),{code:'PT400'});
-  await assert.rejects(()=>write(request(3,{type:'adjust',item:'desk',from:'storage',quantity:10,note:''})),{code:'PT400'});
   assert.equal((await read()).revision,3);
  });
  await t.test('場所と備品の追加・メンバー無効化',async()=>{

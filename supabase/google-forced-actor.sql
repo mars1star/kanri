@@ -101,10 +101,9 @@ begin
   old_count=coalesce((counts#>>array[source->>'id',item->>'id'])::integer,0);
   unit=item->>'unit';
   if kind='adjust' then
-   if length(note)=0 then raise sqlstate 'PT400' using message='変更理由を入力してください。'; end if;
    if quantity=old_count then raise sqlstate 'PT400' using message='現在の個数と同じです。'; end if;
    counts=counts||jsonb_build_object(source->>'id',coalesce(counts->(source->>'id'),'{}'::jsonb)||jsonb_build_object(item->>'id',quantity));
-   detail=jsonb_build_object('type',kind,'title',(item->>'name')||'の個数を設定','description',(source->>'name')||'：'||old_count||unit||' → '||quantity||unit||' ／ '||note,'quantity',quantity,'unit',unit);
+   detail=jsonb_build_object('type',kind,'title',(item->>'name')||'の個数を設定','description',(source->>'name')||'：'||old_count||unit||' → '||quantity||unit||case when note='' then '' else ' ／ '||note end,'quantity',quantity,'unit',unit);
   else
    select v into destination from jsonb_array_elements(places) v where v->>'id'=change->>'to';
    if destination is null or destination->>'id'=source->>'id' then raise sqlstate 'PT400' using message='移動先には別の場所を選んでください。'; end if;

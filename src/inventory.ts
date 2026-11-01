@@ -36,13 +36,13 @@ export function applyChange(original: Inventory, change: Change, id: string): { 
   if (!item || !from) throw new Error("備品と場所を選んでください。");
   const quantity = change.quantity;
   if (typeof quantity !== "number" || !Number.isSafeInteger(quantity) || quantity < (change.type === "transfer" ? 1 : 0) || quantity > 99999) throw new Error("個数は0〜99,999の整数で入力してください（移動は1以上）。");
-  const note = shortText(change.note ?? "", "メモ", 200, change.type === "adjust");
+  const note = shortText(change.note ?? "", "メモ", 200, false);
   const previous = countAt(data, from.id, item.id);
   data.counts[from.id] ??= {};
   if (change.type === "adjust") {
     if (previous === quantity) throw new Error("現在の個数と同じです。");
     data.counts[from.id][item.id] = quantity;
-    return { data, detail: { type: "adjust", title: `${item.name}の個数を設定`, description: `${from.name}：${previous}${item.unit} → ${quantity}${item.unit} ／ ${note}`, quantity, unit: item.unit } };
+    return { data, detail: { type: "adjust", title: `${item.name}の個数を設定`, description: `${from.name}：${previous}${item.unit} → ${quantity}${item.unit}${note ? ` ／ ${note}` : ""}`, quantity, unit: item.unit } };
   }
   const to = data.places.find(e => e.id === change.to);
   if (!to || to.id === from.id) throw new Error("移動先には別の場所を選んでください。");
