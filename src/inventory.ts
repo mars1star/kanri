@@ -2,9 +2,9 @@ export type Entry = { id: string; name: string };
 export type Item = Entry & { unit: string };
 export type Inventory = { places: Entry[]; items: Item[]; counts: Record<string, Record<string, number>>; targets?: Record<string, Record<string, number>> };
 export type Change = {
-  type: "transfer" | "adjust" | "place" | "item" | "delete_place" | "delete_item" | "target";
+  type: "transfer" | "adjust" | "place" | "item" | "delete_place" | "delete_item" | "target" | "targets";
   item?: string; from?: string; to?: string; quantity?: number;
-  name?: string; unit?: string; note?: string;
+  name?: string; unit?: string; note?: string; targets?: Record<string, Record<string, number>>;
 };
 export type Detail = { type: Change["type"]; title: string; description: string; quantity?: number; unit?: string };
 export function initialInventory(): Inventory {

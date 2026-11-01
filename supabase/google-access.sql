@@ -80,7 +80,7 @@ begin
   raise sqlstate 'PT403' using message='許可された方法でログインし直してください。';
  end if;
  change=p_request->'change'; kind=change->>'type';
- if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer','target','delete_place','delete_item') then
+ if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer','target','targets','delete_place','delete_item') then
   raise sqlstate 'PT400' using message='操作が正しくありません。'; end if;
  -- 行ロックで同時操作を直列化。個数の更新と履歴保存は同一トランザクション。
  select * into strict state from public.festival_inventory where id=1 for update;
@@ -92,7 +92,13 @@ begin
  end if;
  if state.revision<>expected then raise sqlstate 'PT409' using message='ほかの人が更新しました。最新の個数を確認して再度登録してください。'; end if;
  items=state.data->'items'; places=state.data->'places'; counts=state.data->'counts'; targets=coalesce(state.data->'targets','{}'::jsonb);
- if kind='target' then
+ if kind='targets' then
+  targets=change->'targets';
+  if jsonb_typeof(targets) is distinct from 'object' or octet_length(targets::text)>5000
+   or exists(select 1 from jsonb_each(targets) p where not exists(select 1 from jsonb_array_elements(places) v where v->>'id'=p.key) or jsonb_typeof(p.value)<>'object')
+   or exists(select 1 from jsonb_each(targets) p cross join lateral jsonb_each(p.value) i where not exists(select 1 from jsonb_array_elements(items) v where v->>'id'=i.key) or jsonb_typeof(i.value)<>'number' or i.value::text !~ '^[0-9]{1,5}$') then raise sqlstate 'PT400' using message='目標数の一覧を確認してください。'; end if;
+  detail=jsonb_build_object('type',kind,'title','目標数をまとめて設定','description','場所ごとの目標数を更新しました');
+ elsif kind='target' then
   select v into item from jsonb_array_elements(items) v where v->>'id'=change->>'item';
   select v into source from jsonb_array_elements(places) v where v->>'id'=change->>'from';
   if item is null or source is null or jsonb_typeof(change->'quantity') is distinct from 'number' or coalesce(change->>'quantity','') !~ '^[0-9]{1,5}$' then raise sqlstate 'PT400' using message='場所・備品・0〜99,999の目標数を入力してください。'; end if;
