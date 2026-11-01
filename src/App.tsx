@@ -156,7 +156,7 @@ export default function Home() {
     <div className="main-wrap">
       <header className="topbar"><span><b>{tab === "inventory" ? "備品" : tab === "history" ? "履歴" : tab === "settings" ? "設定" : "プロフィール"}</b></span><div className={`sync ${error ? "offline" : ""}`}><i/>{error ? "接続エラー" : snapshot ? "同期中" : "ログイン前"}</div>{signedIn && <button className="profile-shortcut" onClick={() => setTab("profile")}><UserCircle size={18}/>{snapshot?.user.name}</button>}</header>
       <main>
-        <div className="page-heading"><div><h1>{tab === "inventory" ? "備品管理" : tab === "history" ? "変更履歴" : tab === "settings" ? "場所・備品の設定" : "プロフィール"}</h1></div>{tab === "inventory" && <button className="primary main-action" onClick={() => open("transfer")} disabled={!data}><ArrowLeftRight size={18}/>移動を記録</button>}</div>
+        <div className="page-heading"><div><h1>{tab === "inventory" ? "備品管理" : tab === "history" ? "変更履歴" : tab === "settings" ? "場所・備品の設定" : "プロフィール"}</h1></div>{tab === "inventory" && <div className="main-actions"><button className="small-button initial-count-button" onClick={() => open("adjust")} disabled={!data}><ClipboardList size={18}/>初期個数を登録</button><button className="primary main-action" onClick={() => open("transfer")} disabled={!data}><ArrowLeftRight size={18}/>移動を記録</button></div>}</div>
         {error && <div className="error-banner" role="alert"><span>{error}{snapshot && " 表示中の個数は最新でない可能性があります。"}</span><button className="small-button" onClick={() => void refresh()}>再読み込み</button></div>}
         {(!configured || login) && <SignIn/>}{configured && !data && !error && !login && <div className="loading">備品の情報を読み込んでいます…</div>}
         {data && tab === "inventory" && <>
