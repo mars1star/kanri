@@ -48,7 +48,7 @@ test('Google allowlist protects both inventory RPCs',async t=>{
  });
  await t.test('許可アドレスの確認済みGoogle identityとOAuthセッションで保存できる',async()=>{
   await claims();const state=await read();assert.equal(state.user.name,'運営メンバー');
-  await write();const updated=await read();assert.equal(updated.data.counts.storage.desk,2);assert.equal(updated.history[0].actor,'Googleログイン利用者');
+  await write();const updated=await read();assert.equal(updated.data.counts.storage.desk,2);assert.equal(updated.history[0].actor,'運営メンバー');
  });
  await t.test('別メールのセッションは連携済みGoogle identityを借用できない',async()=>{
   await claims('oauth','other@example.invalid');await denied();
@@ -71,7 +71,7 @@ test('Google allowlist protects both inventory RPCs',async t=>{
   assert.equal((await read()).user.name,'非常用アカウント');
   const emergencyBody={id:crypto.randomUUID(),revision:1,actor:'非常時の入力名',change:{type:'adjust',item:'desk',from:'storage',quantity:3,note:'非常用テスト'}};
   await db.query('select public.festival_change($1::jsonb)',[JSON.stringify(emergencyBody)]);
-  assert.equal((await read()).history[0].actor,'非常用ログイン利用者');
+  assert.equal((await read()).history[0].actor,'非常時の入力名（非常用）');
   await claims('password','other@example.invalid');await denied();
   await claims('otp','festival-emergency@seiko.ac.jp');await denied();
  });

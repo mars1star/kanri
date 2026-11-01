@@ -68,9 +68,14 @@ begin
  if request_id is null or expected is null or expected<0 or jsonb_typeof(p_request->'revision') is distinct from 'number' then
   raise sqlstate 'PT400' using message='更新番号を確認してください。'; end if;
  if coalesce(auth.jwt()->'amr' @> '[{"method":"oauth"}]'::jsonb,false) then
-  actor='Googleログイン利用者';
+  -- Google identity verified by festival_google_member(); never trust a client-supplied name.
+  actor=member.display_name;
  elsif coalesce(auth.jwt()->'amr' @> '[{"method":"password"}]'::jsonb,false) then
-  actor='非常用ログイン利用者';
+  actor=btrim(coalesce(p_request->>'actor',''));
+  if jsonb_typeof(p_request->'actor') is distinct from 'string' or length(actor) not between 1 and 40 then
+   raise sqlstate 'PT400' using message='履歴に表示する名前を40文字以内で入力してください。';
+  end if;
+  actor=actor||'（非常用）';
  else
   raise sqlstate 'PT403' using message='許可された方法でログインし直してください。';
  end if;
