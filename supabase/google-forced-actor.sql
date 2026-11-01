@@ -42,18 +42,19 @@ begin
  items=state.data->'items'; places=state.data->'places'; counts=state.data->'counts'; targets=coalesce(state.data->'targets','{}'::jsonb);
  if kind='target' then
   select v into item from jsonb_array_elements(items) v where v->>'id'=change->>'item';
-  if item is null or jsonb_typeof(change->'quantity') is distinct from 'number' or coalesce(change->>'quantity','') !~ '^[0-9]{1,5}$' then
-   raise sqlstate 'PT400' using message='備品と0〜99,999の目標数を入力してください。'; end if;
+  select v into source from jsonb_array_elements(places) v where v->>'id'=change->>'from';
+  if item is null or source is null or jsonb_typeof(change->'quantity') is distinct from 'number' or coalesce(change->>'quantity','') !~ '^[0-9]{1,5}$' then
+   raise sqlstate 'PT400' using message='場所・備品・0〜99,999の目標数を入力してください。'; end if;
   quantity=(change->>'quantity')::integer;
-  targets=targets||jsonb_build_object(item->>'id',quantity);
-  detail=jsonb_build_object('type',kind,'title',(item->>'name')||'の目標数を設定','description','目標：'||quantity||(item->>'unit'));
+  targets=targets||jsonb_build_object(source->>'id',coalesce(targets->(source->>'id'),'{}'::jsonb)||jsonb_build_object(item->>'id',quantity));
+  detail=jsonb_build_object('type',kind,'title',(source->>'name')||'の'||(item->>'name')||'目標を設定','description','目標：'||quantity||(item->>'unit'));
  elsif kind='delete_place' then
   select v into source from jsonb_array_elements(places) v where v->>'id'=change->>'from';
   if source is null then raise sqlstate 'PT400' using message='場所が見つかりません。'; end if;
   if exists(select 1 from jsonb_each_text(coalesce(counts->(source->>'id'),'{}'::jsonb)) e where e.value::integer<>0) then
    raise sqlstate 'PT400' using message='個数が残っている場所は削除できません。先に0にしてください。'; end if;
   select coalesce(jsonb_agg(v),'[]'::jsonb) into places from jsonb_array_elements(places) v where v->>'id'<>source->>'id';
-  counts=counts-(source->>'id');
+  counts=counts-(source->>'id'); targets=targets-(source->>'id');
   detail=jsonb_build_object('type',kind,'title',(source->>'name')||'を削除','description','場所を削除しました');
  elsif kind='delete_item' then
   select v into item from jsonb_array_elements(items) v where v->>'id'=change->>'item';
@@ -62,7 +63,7 @@ begin
    raise sqlstate 'PT400' using message='個数が残っている備品は削除できません。先に0にしてください。'; end if;
   select coalesce(jsonb_agg(v),'[]'::jsonb) into items from jsonb_array_elements(items) v where v->>'id'<>item->>'id';
   select coalesce(jsonb_object_agg(e.key,e.value-(item->>'id')),'{}'::jsonb) into counts from jsonb_each(counts) e;
-  targets=targets-(item->>'id');
+  select coalesce(jsonb_object_agg(e.key,e.value-(item->>'id')),'{}'::jsonb) into targets from jsonb_each(targets) e;
   detail=jsonb_build_object('type',kind,'title',(item->>'name')||'を削除','description','備品を削除しました');
  elsif kind in ('item','place') then
   name=btrim(coalesce(change->>'name','')); unit=btrim(coalesce(change->>'unit',''));

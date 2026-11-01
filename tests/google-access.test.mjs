@@ -82,10 +82,10 @@ test('Google allowlist protects both inventory RPCs',async t=>{
   await claims();await identity();
   let state=await read();
   const change=async body=>db.query('select public.festival_change($1::jsonb)',[JSON.stringify({id:crypto.randomUUID(),revision:state.revision,actor:'偽名',change:body})]);
-  await change({type:'target',item:'desk',quantity:5}); state=await read(); assert.equal(state.data.targets.desk,5);
+  await change({type:'target',from:'storage',item:'desk',quantity:5}); state=await read(); assert.equal(state.data.targets.storage.desk,5);
   await assert.rejects(change({type:'delete_item',item:'desk'}),{code:'PT400'});
   await change({type:'adjust',item:'desk',from:'storage',quantity:0,note:'削除前確認'}); state=await read();
-  await change({type:'delete_item',item:'desk'}); state=await read(); assert.equal(state.data.items.some(i=>i.id==='desk'),false); assert.equal(state.data.targets.desk,undefined);
+  await change({type:'delete_item',item:'desk'}); state=await read(); assert.equal(state.data.items.some(i=>i.id==='desk'),false); assert.equal(state.data.targets.storage.desk,undefined);
   await change({type:'delete_place',from:'storage'}); state=await read(); assert.equal(state.data.places.some(p=>p.id==='storage'),false);
  });
  await db.close();

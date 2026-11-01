@@ -1,6 +1,6 @@
 export type Entry = { id: string; name: string };
 export type Item = Entry & { unit: string };
-export type Inventory = { places: Entry[]; items: Item[]; counts: Record<string, Record<string, number>>; targets?: Record<string, number> };
+export type Inventory = { places: Entry[]; items: Item[]; counts: Record<string, Record<string, number>>; targets?: Record<string, Record<string, number>> };
 export type Change = {
   type: "transfer" | "adjust" | "place" | "item" | "delete_place" | "delete_item" | "target";
   item?: string; from?: string; to?: string; quantity?: number;
