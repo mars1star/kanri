@@ -78,5 +78,15 @@ test('Google allowlist protects both inventory RPCs',async t=>{
  await t.test('非常用allowlistの直接読取を拒否',async()=>{
   await assert.rejects(()=>db.query('select * from public.festival_emergency_allowlist'),{code:'42501'});
  });
+ await t.test('目標数を保存し、個数が残る備品を保護してから安全に削除',async()=>{
+  await claims();await identity();
+  let state=await read();
+  const change=async body=>db.query('select public.festival_change($1::jsonb)',[JSON.stringify({id:crypto.randomUUID(),revision:state.revision,actor:'偽名',change:body})]);
+  await change({type:'target',item:'desk',quantity:5}); state=await read(); assert.equal(state.data.targets.desk,5);
+  await assert.rejects(change({type:'delete_item',item:'desk'}),{code:'PT400'});
+  await change({type:'adjust',item:'desk',from:'storage',quantity:0,note:'削除前確認'}); state=await read();
+  await change({type:'delete_item',item:'desk'}); state=await read(); assert.equal(state.data.items.some(i=>i.id==='desk'),false); assert.equal(state.data.targets.desk,undefined);
+  await change({type:'delete_place',from:'storage'}); state=await read(); assert.equal(state.data.places.some(p=>p.id==='storage'),false);
+ });
  await db.close();
 });

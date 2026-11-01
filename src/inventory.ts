@@ -1,8 +1,8 @@
 export type Entry = { id: string; name: string };
 export type Item = Entry & { unit: string };
-export type Inventory = { places: Entry[]; items: Item[]; counts: Record<string, Record<string, number>> };
+export type Inventory = { places: Entry[]; items: Item[]; counts: Record<string, Record<string, number>>; targets?: Record<string, number> };
 export type Change = {
-  type: "transfer" | "adjust" | "place" | "item";
+  type: "transfer" | "adjust" | "place" | "item" | "delete_place" | "delete_item" | "target";
   item?: string; from?: string; to?: string; quantity?: number;
   name?: string; unit?: string; note?: string;
 };
@@ -11,7 +11,7 @@ export function initialInventory(): Inventory {
   return {
     places: [{ id: "storage", name: "倉庫" }, { id: "gym", name: "体育館" }, { id: "classroom", name: "教室（仮）" }],
     items: [{ id: "desk", name: "机", unit: "台" }, { id: "chair", name: "椅子", unit: "脚" }, { id: "tent", name: "テント", unit: "張" }],
-    counts: {},
+    counts: {}, targets: {},
   };
 }
 export function countAt(data: Inventory, place: string, item: string) { return data.counts[place]?.[item] ?? 0; }
