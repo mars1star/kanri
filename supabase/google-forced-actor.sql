@@ -9,7 +9,7 @@ declare
 begin
  if auth.uid() is null then raise sqlstate 'PT401' using message='ログインしてください。'; end if;
  member=public.festival_google_member();
- if p_request is null or jsonb_typeof(p_request)<>'object' or octet_length(p_request::text)>6000 then
+ if p_request is null or jsonb_typeof(p_request)<>'object' or octet_length(p_request::text)>12000 then
   raise sqlstate 'PT400' using message='入力形式が正しくありません。'; end if;
  begin request_id=(p_request->>'id')::uuid; expected=(p_request->>'revision')::bigint;
  exception when others then raise sqlstate 'PT400' using message='登録IDまたは更新番号が正しくありません。'; end;
@@ -28,7 +28,7 @@ begin
   raise sqlstate 'PT403' using message='許可された方法でログインし直してください。';
  end if;
  change=p_request->'change'; kind=change->>'type';
- if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer','batch','target','targets','delete_place','delete_item','place_floor','reorder_place','reorder_item') then
+ if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','bulk_add','adjust','transfer','batch','target','targets','delete_place','delete_item','place_floor','reorder_place','reorder_item') then
   raise sqlstate 'PT400' using message='操作が正しくありません。'; end if;
  -- 行ロックで同時操作を直列化。個数の更新と履歴保存は同一トランザクション。
  select * into strict state from public.festival_inventory where id=1 for update;
@@ -40,7 +40,20 @@ begin
  end if;
  if state.revision<>expected then raise sqlstate 'PT409' using message='ほかの人が更新しました。最新の個数を確認して再度登録してください。'; end if;
  items=state.data->'items'; places=state.data->'places'; counts=state.data->'counts'; targets=coalesce(state.data->'targets','{}'::jsonb);
- if kind='batch' then
+ if kind='bulk_add' then
+  operation=change->>'category';
+  if operation not in ('place','item') or jsonb_typeof(change->'additions') is distinct from 'array' or jsonb_array_length(change->'additions') not between 1 and 50 then raise sqlstate 'PT400' using message='追加する一覧を確認してください。'; end if;
+  if (case when operation='place' then jsonb_array_length(places) else jsonb_array_length(items) end)+jsonb_array_length(change->'additions')>100 then raise sqlstate 'PT400' using message='登録できる数は100件までです。'; end if;
+  changed_count=0;
+  for entry in select value from jsonb_array_elements(change->'additions') loop
+   name=btrim(coalesce(entry->>'name','')); unit=btrim(coalesce(entry->>'unit',''));
+   if length(name) not between 1 and 30 or (operation='item' and length(unit) not between 1 and 5) then raise sqlstate 'PT400' using message='名前と単位を確認してください。'; end if;
+   if operation='place' then if exists(select 1 from jsonb_array_elements(places) v where normalize(v->>'name',NFKC)=normalize(name,NFKC)) then raise sqlstate 'PT400' using message=name||'は登録済みです。'; end if; places=places||jsonb_build_array(jsonb_build_object('id',(md5(request_id::text||':'||changed_count))::uuid::text,'name',name));
+   else if exists(select 1 from jsonb_array_elements(items) v where normalize(v->>'name',NFKC)=normalize(name,NFKC)) then raise sqlstate 'PT400' using message=name||'は登録済みです。'; end if; items=items||jsonb_build_array(jsonb_build_object('id',(md5(request_id::text||':'||changed_count))::uuid::text,'name',name,'unit',unit)); end if;
+   changed_count=changed_count+1;
+  end loop;
+  detail=jsonb_build_object('type',operation,'title',changed_count||'件をまとめて追加','description',case when operation='place' then '場所' else '備品' end||'をまとめて追加しました');
+ elsif kind='batch' then
   operation=change->>'operation'; note=btrim(coalesce(change->>'note',''));
   select v into source from jsonb_array_elements(places) v where v->>'id'=change->>'from';
   if operation not in ('adjust','transfer') or source is null or jsonb_typeof(change->'entries') is distinct from 'array' or jsonb_array_length(change->'entries') not between 1 and 100 or length(note)>200 then
