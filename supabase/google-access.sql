@@ -57,7 +57,7 @@ declare
  previous_request public.festival_activity%rowtype;
  request_id uuid; expected bigint; change jsonb; kind text; actor text;
  item jsonb; source jsonb; destination jsonb; items jsonb; places jsonb; counts jsonb; targets jsonb;
- quantity integer; old_count integer; target_count integer; note text; name text; unit text; detail jsonb;
+ quantity integer; old_count integer; target_count integer; note text; name text; unit text; floor text; detail jsonb;
 begin
  if auth.uid() is null then raise sqlstate 'PT401' using message='ログインしてください。'; end if;
  member=public.festival_google_member();
@@ -80,7 +80,7 @@ begin
   raise sqlstate 'PT403' using message='許可された方法でログインし直してください。';
  end if;
  change=p_request->'change'; kind=change->>'type';
- if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer','target','targets','delete_place','delete_item') then
+ if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer','target','targets','delete_place','delete_item','place_floor') then
   raise sqlstate 'PT400' using message='操作が正しくありません。'; end if;
  -- 行ロックで同時操作を直列化。個数の更新と履歴保存は同一トランザクション。
  select * into strict state from public.festival_inventory where id=1 for update;
@@ -104,6 +104,14 @@ begin
   if item is null or source is null or jsonb_typeof(change->'quantity') is distinct from 'number' or coalesce(change->>'quantity','') !~ '^[0-9]{1,5}$' then raise sqlstate 'PT400' using message='場所・備品・0〜99,999の目標数を入力してください。'; end if;
   quantity=(change->>'quantity')::integer; targets=targets||jsonb_build_object(source->>'id',coalesce(targets->(source->>'id'),'{}'::jsonb)||jsonb_build_object(item->>'id',quantity));
   detail=jsonb_build_object('type',kind,'title',(source->>'name')||'の'||(item->>'name')||'目標を設定','description','目標：'||quantity||(item->>'unit'));
+ elsif kind='place_floor' then
+  select v into source from jsonb_array_elements(places) v where v->>'id'=change->>'from';
+  floor=btrim(coalesce(change->>'floor',''));
+  if source is null or jsonb_typeof(change->'floor') is distinct from 'string' or floor not in ('','1F','2F','3F','4F') then
+   raise sqlstate 'PT400' using message='場所と階を確認してください。'; end if;
+  select coalesce(jsonb_agg(case when v->>'id'=source->>'id' then case when floor='' then v-'floor' else v||jsonb_build_object('floor',floor) end else v end),'[]'::jsonb)
+  into places from jsonb_array_elements(places) v;
+  detail=jsonb_build_object('type',kind,'title',(source->>'name')||'の階を設定','description',case when floor='' then '階の設定を解除しました' else floor||'に設定しました' end);
  elsif kind='delete_place' then
   select v into source from jsonb_array_elements(places) v where v->>'id'=change->>'from';
   if source is null then raise sqlstate 'PT400' using message='場所が見つかりません。'; end if;

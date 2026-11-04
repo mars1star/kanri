@@ -48,7 +48,7 @@ declare
  previous_request public.festival_activity%rowtype;
  request_id uuid; expected bigint; change jsonb; kind text; actor text;
  item jsonb; source jsonb; destination jsonb; items jsonb; places jsonb; counts jsonb;
- quantity integer; old_count integer; target_count integer; note text; name text; unit text; detail jsonb;
+ quantity integer; old_count integer; target_count integer; note text; name text; unit text; floor text; detail jsonb;
 begin
  if auth.uid() is null then raise sqlstate 'PT401' using message='ログインしてください。'; end if;
  select * into member from public.festival_members where user_id=auth.uid() and active for share;
@@ -63,7 +63,7 @@ begin
  if jsonb_typeof(p_request->'actor') is distinct from 'string' or length(actor) not between 1 and 40 then
   raise sqlstate 'PT400' using message='担当者名を40文字以内で入力してください。'; end if;
  change=p_request->'change'; kind=change->>'type';
- if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer') then
+ if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer','place_floor') then
   raise sqlstate 'PT400' using message='操作が正しくありません。'; end if;
  -- 行ロックで同時操作を直列化。個数の更新と履歴保存は同一トランザクション。
  select * into strict state from public.festival_inventory where id=1 for update;
@@ -75,7 +75,15 @@ begin
  end if;
  if state.revision<>expected then raise sqlstate 'PT409' using message='ほかの人が更新しました。最新の個数を確認して再度登録してください。'; end if;
  items=state.data->'items'; places=state.data->'places'; counts=state.data->'counts';
- if kind in ('item','place') then
+ if kind='place_floor' then
+  select v into source from jsonb_array_elements(places) v where v->>'id'=change->>'from';
+  floor=btrim(coalesce(change->>'floor',''));
+  if source is null or jsonb_typeof(change->'floor') is distinct from 'string' or floor not in ('','1F','2F','3F','4F') then
+   raise sqlstate 'PT400' using message='場所と階を確認してください。'; end if;
+  select coalesce(jsonb_agg(case when v->>'id'=source->>'id' then case when floor='' then v-'floor' else v||jsonb_build_object('floor',floor) end else v end),'[]'::jsonb)
+  into places from jsonb_array_elements(places) v;
+  detail=jsonb_build_object('type',kind,'title',(source->>'name')||'の階を設定','description',case when floor='' then '階の設定を解除しました' else floor||'に設定しました' end);
+ elsif kind in ('item','place') then
   name=btrim(coalesce(change->>'name','')); unit=btrim(coalesce(change->>'unit',''));
   if jsonb_typeof(change->'name') is distinct from 'string' or length(name) not between 1 and 30 then
    raise sqlstate 'PT400' using message='名前を30文字以内で入力してください。'; end if;

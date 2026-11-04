@@ -1,10 +1,12 @@
 export type Entry = { id: string; name: string };
 export type Item = Entry & { unit: string };
-export type Inventory = { places: Entry[]; items: Item[]; counts: Record<string, Record<string, number>>; targets?: Record<string, Record<string, number>> };
+export type Floor = "1F" | "2F" | "3F" | "4F";
+export type Place = Entry & { floor?: Floor };
+export type Inventory = { places: Place[]; items: Item[]; counts: Record<string, Record<string, number>>; targets?: Record<string, Record<string, number>> };
 export type Change = {
-  type: "transfer" | "adjust" | "place" | "item" | "delete_place" | "delete_item" | "target" | "targets";
+  type: "transfer" | "adjust" | "place" | "item" | "delete_place" | "delete_item" | "target" | "targets" | "place_floor";
   item?: string; from?: string; to?: string; quantity?: number;
-  name?: string; unit?: string; note?: string; targets?: Record<string, Record<string, number>>;
+  name?: string; unit?: string; note?: string; floor?: Floor | ""; targets?: Record<string, Record<string, number>>;
 };
 export type Detail = { type: Change["type"]; title: string; description: string; quantity?: number; unit?: string };
 export function initialInventory(): Inventory {
@@ -26,9 +28,15 @@ export function applyChange(original: Inventory, change: Change, id: string): { 
     const list = change.type === "place" ? data.places : data.items;
     if (list.some(e => e.name.normalize("NFKC") === name.normalize("NFKC"))) throw new Error("同じ名前がすでに登録されています。");
     if (list.length >= 100) throw new Error("登録できる数は100件までです。");
-    if (change.type === "place") data.places.push({ id, name });
+    if (change.type === "place") data.places.push({ id, name, ...(change.floor ? { floor: change.floor } : {}) });
     else data.items.push({ id, name, unit: shortText(change.unit, "単位", 5) });
     return { data, detail: { type: change.type, title: `${name}を追加`, description: change.type === "place" ? "管理する場所を追加しました" : "管理する備品を追加しました" } };
+  }
+  if (change.type === "place_floor") {
+    const place = data.places.find(e => e.id === change.from);
+    if (!place || !["", "1F", "2F", "3F", "4F"].includes(change.floor ?? "")) throw new Error("場所と階を確認してください。");
+    if (change.floor) place.floor = change.floor; else delete place.floor;
+    return { data, detail: { type: change.type, title: `${place.name}の階を設定`, description: change.floor ? `${change.floor}に設定しました` : "階の設定を解除しました" } };
   }
   if (change.type !== "transfer" && change.type !== "adjust") throw new Error("操作が正しくありません。");
   const item = data.items.find(e => e.id === change.item);

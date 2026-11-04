@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { ArrowDownToLine, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronLeft, ChevronRight, Clock3, ClipboardList, LayoutGrid, MapPin, Package, Plus, RefreshCw, Search, Settings2, Target, Trash2, UserCircle, Users, X } from "lucide-react";
-import { countAt, type Change, type Detail, type Inventory } from "./inventory";
+import { countAt, type Change, type Detail, type Floor, type Inventory } from "./inventory";
 import { ApiError, configured, inventoryRequest, presenceRequest, supabase } from './api';
 import SignIn from './SignIn';
 
@@ -19,6 +19,7 @@ export default function Home() {
   const [settingsPlaceQuery, setSettingsPlaceQuery] = useState("");
   const [settingsItemQuery, setSettingsItemQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [floorFilter, setFloorFilter] = useState<"all"|Floor>("all");
   const [error, setError] = useState("");
   const [login, setLogin] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
@@ -36,6 +37,7 @@ export default function Home() {
   const [note, setNote] = useState("");
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("個");
+  const [floor, setFloor] = useState<Floor>("1F");
   const [overviewItem, setOverviewItem] = useState("");
   const [targetDraft, setTargetDraft] = useState<Record<string,Record<string,number>>>({});
   const [formError, setFormError] = useState("");
@@ -93,14 +95,14 @@ export default function Home() {
     setTo(snapshot.data.places.find(p => p.id !== selectedFrom)?.id || "");
     setQuantity(next === "adjust" ? String(countAt(snapshot.data, selectedFrom, selectedItem)) : next === "target" ? String(snapshot.data.targets?.[selectedFrom]?.[selectedItem] ?? 0) : "1");
     if(next==="targets") setTargetDraft(structuredClone(snapshot.data.targets||{}));
-    setNote(""); setName(""); setUnit("個"); setFormError(""); setUncertain(false); pending.current = null; setMode(next);
+    setNote(""); setName(""); setUnit("個"); setFloor("1F"); setFormError(""); setUncertain(false); pending.current = null; setMode(next);
   }
   function close() { if (!busy && !uncertain) setMode(null); }
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!snapshot || !mode || busy) return;
     setBusy(true); setFormError("");
-    const change: Change = mode === "place" || mode === "item" ? { type: mode, name, unit } : mode === "targets" ? { type: mode, targets: targetDraft } : mode === "target" ? { type: mode, item, from, quantity: Number(quantity) } : { type: mode, item, from, to, quantity: Number(quantity), note };
+    const change: Change = mode === "place" ? { type: mode, name, floor } : mode === "item" ? { type: mode, name, unit } : mode === "targets" ? { type: mode, targets: targetDraft } : mode === "target" ? { type: mode, item, from, quantity: Number(quantity) } : { type: mode, item, from, to, quantity: Number(quantity), note };
     // The server ignores this value for Google sessions and derives the verified Google profile name itself.
     const body = pending.current || { id: crypto.randomUUID(), revision: formRevision.current ?? snapshot.revision, actor: actor.trim(), change };
     pending.current = body;
@@ -130,14 +132,14 @@ export default function Home() {
   function exportCSV() {
     if (!snapshot) return;
     const cell = (v: unknown) => '"' + String(v).replace(/^[=+@\-\t\r]/, m => "'" + m).replaceAll('"', '""') + '"';
-    const rows = [["場所", "備品", "個数", "単位"], ...snapshot.data.places.flatMap(p => snapshot.data.items.map(i => [p.name, i.name, countAt(snapshot.data, p.id, i.id), i.unit]))];
+    const rows = [["階", "場所", "備品", "個数", "単位"], ...snapshot.data.places.flatMap(p => snapshot.data.items.map(i => [p.floor||"未設定", p.name, i.name, countAt(snapshot.data, p.id, i.id), i.unit]))];
     const url = URL.createObjectURL(new Blob(["\uFEFF" + rows.map(row => row.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = "文化祭_備品一覧.csv"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const data = snapshot?.data;
   const selectedItem = data?.items.find(i => i.id === item);
   const available = data ? countAt(data, from, item) : 0;
-  const visiblePlaces = data?.places.filter(p => (filter === "all" || filter === p.id) && (p.name.includes(query) || data.items.some(i => i.name.includes(query)))) || [];
+  const visiblePlaces = data?.places.filter(p => (floorFilter === "all" || p.floor === floorFilter) && (filter === "all" || filter === p.id) && (p.name.includes(query) || data.items.some(i => i.name.includes(query)))) || [];
   const itemsFor = (placeName: string) => data?.items.filter(i => !query || i.name.includes(query) || placeName.includes(query)) || [];
   const totalFor = (itemId: string) => data?.places.reduce((sum, p) => sum + countAt(data, p.id, itemId), 0) || 0;
   const targetAt = (placeId: string, itemId: string) => data?.targets?.[placeId]?.[itemId] ?? 0;
@@ -172,14 +174,16 @@ export default function Home() {
           </section>
           {snapshot?.revision === 0 && <div className="setup-banner"><span className="setup-icon"><ClipboardList size={23}/></span><div><strong>最初に、いまある個数を登録しましょう。</strong><p>場所と備品は仮の名前です。設定から追加でき、個数は各カードの「個数を設定」から登録できます。</p></div><button className="small-button" onClick={() => open("adjust")}>はじめる <ArrowRight size={15}/></button></div>}
           <section className="inventory-section"><div className="section-heading"><h2>場所ごとの備品 <span>{data.places.length}</span></h2><div className="carousel-controls"><button onClick={()=>carousel.current?.scrollBy({left:-carousel.current.clientWidth,behavior:'smooth'})} aria-label="前の場所"><ChevronLeft/></button><button onClick={()=>carousel.current?.scrollBy({left:carousel.current.clientWidth,behavior:'smooth'})} aria-label="次の場所"><ChevronRight/></button><button className="text-button export" onClick={exportCSV}><ArrowDownToLine size={16}/>CSV</button></div></div>
+            <div className="floor-tabs" aria-label="階で絞り込み">{(["all","1F","2F","3F","4F"] as const).map(value=><button key={value} className={floorFilter===value?'selected':''} onClick={()=>setFloorFilter(value)}>{value==='all'?'すべて':value}</button>)}</div>
             <div className="toolbar"><label className="search"><Search size={18}/><input aria-label="場所や備品を検索" value={query} onChange={e => setQuery(e.target.value)} placeholder="場所や備品を検索"/>{query && <button aria-label="検索をクリア" onClick={() => setQuery("")}><X size={16}/></button>}</label><select aria-label="場所で絞り込み" value={filter} onChange={e => setFilter(e.target.value)}><option value="all">すべての場所</option>{data.places.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select><button className="icon-button" onClick={() => void refresh()} aria-label="最新の情報に更新"><RefreshCw size={17}/></button></div>
-            <div className="location-grid" ref={carousel}>{visiblePlaces.map((p, index) => <article className="location-card" key={p.id}><div className="location-header"><span className="place-icon"><MapPin size={20}/></span><h3>{p.name}</h3><span className="place-number">{index+1}</span></div><div className="stock-list">{itemsFor(p.name).map(i => {const current=countAt(data,p.id,i.id),target=targetAt(p.id,i.id),diff=current-target;return <button className="stock-row" key={i.id} onClick={()=>setOverviewItem(i.id)}><span>{i.name}</span><span className="stock-count"><b>{current.toLocaleString()}<small>{i.unit}</small></b><span className="inline-target">目標 <strong>{target}</strong>{i.unit}</span>{target>0&&<em className={diff>0?'over':diff<0?'short':'just'}>{diff!==0&&<strong>{diff>0?`+${diff}`:`-${Math.abs(diff)}`}</strong>}<small>{diff>0?'超過':diff<0?'不足':'達成'}</small></em>}</span></button>})}</div><div className="location-actions"><button onClick={() => open("adjust", p.id)}>個数設定</button><button onClick={() => open("transfer", p.id)}>移動 <ArrowRight size={15}/></button></div></article>)}</div>
+            <div className="location-grid" ref={carousel}>{visiblePlaces.map((p, index) => <article className="location-card" key={p.id}><div className="location-header"><span className="place-icon"><MapPin size={20}/></span><div><span className="floor-badge">{p.floor||"未設定"}</span><h3>{p.name}</h3></div><span className="place-number">{index+1}</span></div><div className="stock-list">{itemsFor(p.name).map(i => {const current=countAt(data,p.id,i.id),target=targetAt(p.id,i.id),diff=current-target;return <button className="stock-row" key={i.id} onClick={()=>setOverviewItem(i.id)}><span>{i.name}</span><span className="stock-count"><b>{current.toLocaleString()}<small>{i.unit}</small></b><span className="inline-target">目標 <strong>{target}</strong>{i.unit}</span>{target>0&&<em className={diff>0?'over':diff<0?'short':'just'}>{diff!==0&&<strong>{diff>0?`+${diff}`:`-${Math.abs(diff)}`}</strong>}<small>{diff>0?'超過':diff<0?'不足':'達成'}</small></em>}</span></button>})}</div><div className="location-actions"><button onClick={() => open("adjust", p.id)}>個数設定</button><button onClick={() => open("transfer", p.id)}>移動 <ArrowRight size={15}/></button></div></article>)}</div>
             {visiblePlaces.length === 0 && <div className="empty"><Search size={30}/><h3>一致する場所・備品がありません</h3><p>検索キーワードや絞り込みを変えてみてください。</p></div>}
             <div className="inventory-foot"><span><span className="tiny-dot"/> 数字は各場所の現在の個数です</span><span>最終取得 {updated}（日本時間）</span></div>
           </section>
           <section className="history-preview"><div className="section-heading"><h2>最近の記録</h2><button className="text-button" onClick={() => setTab("history")}>すべて見る <ArrowRight size={15}/></button></div><History entries={snapshot!.history.slice(0, 3)}/></section>
         </>}
         {data && tab === "history" && <section className="history-full"><div className="section-heading"><h2>チームの活動記録</h2><span className="muted">最新100件を表示</span></div><History entries={snapshot!.history}/></section>}
+        {data && tab === "settings" && <section className="floor-settings"><div className="section-heading"><h2><MapPin size={20}/>場所の階を設定</h2><span className="muted">1F〜4Fから選択</span></div><div className="floor-setting-list">{data.places.map(p=><label key={p.id}><span>{p.name}</span><select aria-label={`${p.name}の階`} value={p.floor||""} disabled={busy} onChange={e=>void quickChange({type:'place_floor',from:p.id,floor:e.target.value as Floor|""},`${p.name}の階を設定しました。`)}><option value="">未設定</option><option>1F</option><option>2F</option><option>3F</option><option>4F</option></select></label>)}</div></section>}
         {data && tab === "settings" && <div className="settings-grid"><section className="settings-panel"><div className="section-heading"><h2><MapPin size={20}/>管理する場所</h2><button className="small-button" onClick={() => open("place")}><Plus size={16}/>追加</button></div><label className="search settings-search"><Search size={16}/><input value={settingsPlaceQuery} onChange={e=>setSettingsPlaceQuery(e.target.value)} placeholder="場所を検索"/></label><div className="settings-list">{data.places.filter(p=>p.name.includes(settingsPlaceQuery)).map(p => <div className="setting-row" key={p.id}><span>{p.name}</span><button className="danger-icon" disabled={busy} onClick={()=>{if(confirm(`${p.name}を削除しますか？`))void quickChange({type:'delete_place',from:p.id},'場所を削除しました。')}} aria-label={`${p.name}を削除`}><Trash2 size={17}/></button></div>)}</div></section><section className="settings-panel"><div className="section-heading"><h2><Package size={20}/>管理する備品</h2><span className="setting-head-actions"><button className="small-button" onClick={()=>open('targets')}><Target size={16}/>目標をまとめて設定</button><button className="small-button" onClick={() => open("item")}><Plus size={16}/>追加</button></span></div><label className="search settings-search"><Search size={16}/><input value={settingsItemQuery} onChange={e=>setSettingsItemQuery(e.target.value)} placeholder="備品を検索"/></label><div className="settings-list">{data.items.filter(i=>i.name.includes(settingsItemQuery)).map(i => <div className="setting-row" key={i.id}><span><b>{i.name}</b><small>{i.unit}</small></span><span className="setting-actions"><button onClick={()=>open('target',data.places[0]?.id,i.id)}><Target size={16}/>目標</button><button className="danger-icon" disabled={busy} onClick={()=>{if(confirm(`${i.name}を削除しますか？`))void quickChange({type:'delete_item',item:i.id},'備品を削除しました。')}} aria-label={`${i.name}を削除`}><Trash2 size={17}/></button></span></div>)}</div></section></div>}
         {data && tab === "online" && <section className="online-panel"><div className="online-summary"><span className="online-pulse"/><strong>{onlineUsers.length}人がログイン中</strong><button className="small-button" onClick={()=>void refresh()}><RefreshCw size={16}/>更新</button></div><div className="online-list">{onlineUsers.map(user=><div className="online-user" key={user.id}><span className="online-avatar"><UserCircle size={24}/></span><div><strong>{user.name}</strong><p>{user.method==='google'?'Google学校アカウント':'非常用アカウント'}</p></div><time dateTime={user.seenAt}>オンライン</time></div>)}</div><p className="online-note">画面を閉じた利用者は約2分後に一覧から消えます。</p></section>}
         {data && tab === "profile" && <section className="profile-card"><span className="profile-avatar"><UserCircle size={42}/></span><div><h2>{snapshot?.user.name}</h2><p>{googleUser?'Google学校アカウント':'非常用アカウント'}</p></div><dl><div><dt>権限</dt><dd>在庫の閲覧・更新</dd></div><div><dt>最終同期</dt><dd>{updated||'確認中'}</dd></div></dl><button className="danger-outline" onClick={async()=>{const r=await supabase?.auth.signOut({scope:'local'});if(r?.error)setError('ログアウトできませんでした。');}}>ログアウト</button></section>}
