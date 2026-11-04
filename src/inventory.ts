@@ -4,9 +4,10 @@ export type Floor = "1F" | "2F" | "3F" | "4F";
 export type Place = Entry & { floor?: Floor };
 export type Inventory = { places: Place[]; items: Item[]; counts: Record<string, Record<string, number>>; targets?: Record<string, Record<string, number>> };
 export type Change = {
-  type: "transfer" | "adjust" | "place" | "item" | "delete_place" | "delete_item" | "target" | "targets" | "place_floor" | "reorder_place" | "reorder_item";
+  type: "transfer" | "adjust" | "batch" | "place" | "item" | "delete_place" | "delete_item" | "target" | "targets" | "place_floor" | "reorder_place" | "reorder_item";
   item?: string; from?: string; to?: string; quantity?: number;
   name?: string; unit?: string; note?: string; floor?: Floor | ""; targets?: Record<string, Record<string, number>>;
+  operation?: "transfer" | "adjust"; entries?: { item: string; quantity: number }[];
 };
 export type Detail = { type: Change["type"]; title: string; description: string; quantity?: number; unit?: string };
 export function initialInventory(): Inventory {

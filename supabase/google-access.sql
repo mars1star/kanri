@@ -57,8 +57,8 @@ declare
  member public.festival_members%rowtype; state public.festival_inventory%rowtype;
  previous_request public.festival_activity%rowtype;
  request_id uuid; expected bigint; change jsonb; kind text; actor text;
- item jsonb; source jsonb; destination jsonb; items jsonb; places jsonb; counts jsonb; targets jsonb;
- quantity integer; old_count integer; target_count integer; note text; name text; unit text; floor text; detail jsonb;
+ item jsonb; source jsonb; destination jsonb; entry jsonb; items jsonb; places jsonb; counts jsonb; targets jsonb;
+ quantity integer; old_count integer; target_count integer; changed_count integer; note text; name text; unit text; floor text; operation text; detail jsonb;
 begin
  if auth.uid() is null then raise sqlstate 'PT401' using message='ログインしてください。'; end if;
  member=public.festival_google_member();
@@ -81,7 +81,7 @@ begin
   raise sqlstate 'PT403' using message='許可された方法でログインし直してください。';
  end if;
  change=p_request->'change'; kind=change->>'type';
- if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer','target','targets','delete_place','delete_item','place_floor','reorder_place','reorder_item') then
+ if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer','batch','target','targets','delete_place','delete_item','place_floor','reorder_place','reorder_item') then
   raise sqlstate 'PT400' using message='操作が正しくありません。'; end if;
  -- 行ロックで同時操作を直列化。個数の更新と履歴保存は同一トランザクション。
  select * into strict state from public.festival_inventory where id=1 for update;
@@ -93,7 +93,22 @@ begin
  end if;
  if state.revision<>expected then raise sqlstate 'PT409' using message='ほかの人が更新しました。最新の個数を確認して再度登録してください。'; end if;
  items=state.data->'items'; places=state.data->'places'; counts=state.data->'counts'; targets=coalesce(state.data->'targets','{}'::jsonb);
- if kind='targets' then
+ if kind='batch' then
+  operation=change->>'operation'; note=btrim(coalesce(change->>'note',''));
+  select v into source from jsonb_array_elements(places) v where v->>'id'=change->>'from';
+  if operation not in ('adjust','transfer') or source is null or jsonb_typeof(change->'entries') is distinct from 'array' or jsonb_array_length(change->'entries') not between 1 and 100 or length(note)>200 then raise sqlstate 'PT400' using message='まとめて変更する内容を確認してください。'; end if;
+  if operation='transfer' then select v into destination from jsonb_array_elements(places) v where v->>'id'=change->>'to'; if destination is null or destination->>'id'=source->>'id' then raise sqlstate 'PT400' using message='移動先には別の場所を選んでください。'; end if; end if;
+  changed_count=0;
+  for entry in select value from jsonb_array_elements(change->'entries') loop
+   select v into item from jsonb_array_elements(items) v where v->>'id'=entry->>'item';
+   if item is null or jsonb_typeof(entry->'quantity') is distinct from 'number' or coalesce(entry->>'quantity','') !~ '^[0-9]{1,5}$' then raise sqlstate 'PT400' using message='備品と個数を確認してください。'; end if;
+   quantity=(entry->>'quantity')::integer; old_count=coalesce((counts#>>array[source->>'id',item->>'id'])::integer,0);
+   if operation='adjust' then if quantity=old_count then raise sqlstate 'PT400' using message='変更前と同じ個数が含まれています。'; end if; counts=counts||jsonb_build_object(source->>'id',coalesce(counts->(source->>'id'),'{}'::jsonb)||jsonb_build_object(item->>'id',quantity));
+   else if quantity<1 or old_count<quantity then raise sqlstate 'PT400' using message=(item->>'name')||'の移動元個数が不足しています。'; end if; target_count=coalesce((counts#>>array[destination->>'id',item->>'id'])::integer,0); if target_count+quantity>99999 then raise sqlstate 'PT400' using message=(item->>'name')||'の移動先個数が上限を超えます。'; end if; counts=counts||jsonb_build_object(source->>'id',coalesce(counts->(source->>'id'),'{}'::jsonb)||jsonb_build_object(item->>'id',old_count-quantity)); counts=counts||jsonb_build_object(destination->>'id',coalesce(counts->(destination->>'id'),'{}'::jsonb)||jsonb_build_object(item->>'id',target_count+quantity)); end if;
+   changed_count=changed_count+1;
+  end loop;
+  detail=jsonb_build_object('type',operation,'title',changed_count||'種類の備品を'||case when operation='transfer' then 'まとめて移動' else 'まとめて個数設定' end,'description',(source->>'name')||case when operation='transfer' then ' → '||(destination->>'name') else 'の個数を更新' end||case when note='' then '' else ' ／ '||note end);
+ elsif kind='targets' then
   targets=change->'targets';
   if jsonb_typeof(targets) is distinct from 'object' or octet_length(targets::text)>5000
    or exists(select 1 from jsonb_each(targets) p where not exists(select 1 from jsonb_array_elements(places) v where v->>'id'=p.key) or jsonb_typeof(p.value)<>'object')

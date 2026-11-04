@@ -40,6 +40,7 @@ export default function Home() {
   const [unit, setUnit] = useState("個");
   const [overviewItem, setOverviewItem] = useState("");
   const [targetDraft, setTargetDraft] = useState<Record<string,Record<string,number>>>({});
+  const [batchDraft, setBatchDraft] = useState<Record<string,string>>({});
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
   const [uncertain, setUncertain] = useState(false);
@@ -94,6 +95,8 @@ export default function Home() {
     setFrom(selectedFrom); setItem(selectedItem);
     setTo(snapshot.data.places.find(p => p.id !== selectedFrom)?.id || "");
     setQuantity(next === "adjust" ? String(countAt(snapshot.data, selectedFrom, selectedItem)) : next === "target" ? String(snapshot.data.targets?.[selectedFrom]?.[selectedItem] ?? 0) : "1");
+    if(next==="adjust") setBatchDraft(Object.fromEntries(snapshot.data.items.map(i=>[i.id,String(countAt(snapshot.data,selectedFrom,i.id))])));
+    if(next==="transfer") setBatchDraft(Object.fromEntries(snapshot.data.items.map(i=>[i.id,"0"])));
     if(next==="targets") setTargetDraft(structuredClone(snapshot.data.targets||{}));
     setNote(""); setName(""); setUnit("個"); setFormError(""); setUncertain(false); pending.current = null; setMode(next);
   }
@@ -103,7 +106,8 @@ export default function Home() {
     if (!snapshot || !mode || busy) return;
     setBusy(true); setFormError("");
     const enteredQuantity = parseCountText(quantity);
-    const change: Change = mode === "place" ? { type: mode, name } : mode === "item" ? { type: mode, name, unit } : mode === "targets" ? { type: mode, targets: targetDraft } : mode === "target" ? { type: mode, item, from, quantity: enteredQuantity } : { type: mode, item, from, to, quantity: enteredQuantity, note };
+    const batchEntries=data?.items.flatMap(i=>{const value=parseCountText(batchDraft[i.id]??"");return mode==="transfer"?(value>0?[{item:i.id,quantity:value}]:[]):value!==countAt(data,from,i.id)?[{item:i.id,quantity:value}]:[]})||[];
+    const change: Change = mode === "place" ? { type: mode, name } : mode === "item" ? { type: mode, name, unit } : mode === "targets" ? { type: mode, targets: targetDraft } : mode === "target" ? { type: mode, item, from, quantity: enteredQuantity } : { type:"batch", operation:mode, entries:batchEntries, from, to, note };
     // The server ignores this value for Google sessions and derives the verified Google profile name itself.
     const body = pending.current || { id: crypto.randomUUID(), revision: formRevision.current ?? snapshot.revision, actor: actor.trim(), change };
     pending.current = body;
@@ -146,8 +150,6 @@ export default function Home() {
     const link = document.createElement("a"); link.href = url; link.download = "文化祭_備品一覧.csv"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const data = snapshot?.data;
-  const selectedItem = data?.items.find(i => i.id === item);
-  const available = data ? countAt(data, from, item) : 0;
   const visiblePlaces = data?.places.filter(p => (floorFilter === "all" || p.floor === floorFilter) && (filter === "all" || filter === p.id) && (p.name.includes(query) || data.items.some(i => i.name.includes(query)))) || [];
   const itemsFor = (placeName: string) => data?.items.filter(i => !query || i.name.includes(query) || placeName.includes(query)) || [];
   const totalFor = (itemId: string) => data?.places.reduce((sum, p) => sum + countAt(data, p.id, itemId), 0) || 0;
@@ -207,10 +209,9 @@ export default function Home() {
       <fieldset disabled={busy || uncertain}>
         <label>履歴に表示する名前<span className="required">必須</span><input value={actor} onChange={e => setActor(e.target.value)} placeholder="例：2年A組 山田" required maxLength={40} autoComplete="name" readOnly={googleUser}/><small className="locked-name">{googleUser ? "Googleアカウントの氏名を使用します（変更不可）" : "非常用ログインとして履歴に記録されます"}</small></label>
         {(mode === "item" || mode === "place") ? <><label>{mode === "place" ? "場所の名前" : "備品の名前"}<input autoComplete="off" value={name} onChange={e => setName(e.target.value)} placeholder={mode === "place" ? "例：2年A組・中庭" : "例：長机・パイプ椅子"} maxLength={30} required/></label>{mode === "item" && <label>単位<input value={unit} onChange={e => setUnit(e.target.value)} placeholder="個・台・脚" required maxLength={5}/></label>}</> : mode === "targets" ? <div className="target-matrix" style={{'--matrix-cols':data.items.length} as CSSProperties}><div className="matrix-row matrix-head"><b>場所</b>{data.items.map(i=><b key={i.id}>{i.name}<small>{i.unit}</small></b>)}</div>{data.places.map(p=><div className="matrix-row" key={p.id}><strong>{p.name}</strong>{data.items.map(i=><input key={i.id} aria-label={`${p.name}の${i.name}目標`} type="number" min="0" max="99999" step="1" value={targetDraft[p.id]?.[i.id]??0} onChange={e=>setTargetDraft(old=>({...old,[p.id]:{...(old[p.id]||{}),[i.id]:Math.max(0,Math.min(99999,Number(e.target.value)||0))}}))}/>)}</div>)}</div> : mode === "target" ? <><label>場所<select value={from} onChange={e=>{setFrom(e.target.value);setQuantity(String(data.targets?.[e.target.value]?.[item]??0))}}>{data.places.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>備品<select value={item} onChange={e=>{setItem(e.target.value);setQuantity(String(data.targets?.[from]?.[e.target.value]??0))}}>{data.items.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select></label><label>この場所の目標数<input type="number" min="0" max="99999" step="1" required value={quantity} onChange={e=>setQuantity(e.target.value)}/></label></> : <>
-          <label>備品<select value={item} onChange={e => { setItem(e.target.value); if (mode === "adjust") setQuantity(String(countAt(data, from, e.target.value))); }}>{data.items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}</select></label>
-          <div className={mode === "transfer" ? "route-fields" : ""}><label>{mode === "transfer" ? "移動元" : "場所"}<select value={from} onChange={e => { setFrom(e.target.value); if (mode === "adjust") setQuantity(String(countAt(data, e.target.value, item))); if (e.target.value === to) setTo(data.places.find(p => p.id !== e.target.value)?.id || ""); }}>{data.places.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{mode === "transfer" && <><ArrowRight size={18}/><label>移動先<select value={to} onChange={e => setTo(e.target.value)} required><option value="" disabled>選択してください</option>{data.places.filter(p => p.id !== from).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></>}</div>
-          <label>{mode === "transfer" ? "移動する個数" : "確認した現在の個数"}<div className="quantity-control"><button type="button" aria-label="個数を1減らす" onClick={() => setQuantity(String(Math.max(mode === "transfer" ? 1 : 0, (parseCountText(quantity)||0) - 1)))}>−</button><input type="text" inputMode="numeric" pattern="[0-9０-９,]*" maxLength={6} required value={quantity} onChange={e => setQuantity(e.target.value)} aria-label="個数を直接入力"/><span>{selectedItem?.unit}</span><button type="button" aria-label="個数を1増やす" onClick={() => setQuantity(String(Math.min(mode === "transfer" ? Math.max(1, available) : 99999, (parseCountText(quantity)||0) + 1)))}>＋</button></div><small className="input-help">数字を直接入力できます（全角数字も可）</small></label>
-          <div className="count-preview"><span>現在 {available}{selectedItem?.unit}</span>{mode === "transfer" && <span>移動後 <b>{Math.max(0, available - Number(quantity))}</b>{selectedItem?.unit}</span>}</div>
+          <div className={mode === "transfer" ? "route-fields" : ""}><label>{mode === "transfer" ? "移動元" : "場所"}<select value={from} onChange={e => {setFrom(e.target.value);setBatchDraft(Object.fromEntries(data.items.map(i=>[i.id,mode==='adjust'?String(countAt(data,e.target.value,i.id)):'0'])));if(e.target.value===to)setTo(data.places.find(p=>p.id!==e.target.value)?.id||'')}}>{data.places.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{mode === "transfer" && <><ArrowRight size={18}/><label>移動先<select value={to} onChange={e => setTo(e.target.value)} required><option value="" disabled>選択してください</option>{data.places.filter(p => p.id !== from).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></>}</div>
+          <div className="batch-list"><div className="batch-head"><b>備品</b><b>現在</b><b>{mode==='transfer'?'移動数':'設定後'}</b></div>{data.items.map(i=><label className="batch-row" key={i.id}><span>{i.name}<small>{i.unit}</small></span><span>{countAt(data,from,i.id)}{i.unit}</span><input type="text" inputMode="numeric" pattern="[0-9０-９,]*" maxLength={6} value={batchDraft[i.id]??''} onChange={e=>setBatchDraft(old=>({...old,[i.id]:e.target.value}))} aria-label={`${i.name}の${mode==='transfer'?'移動数':'個数'}`}/></label>)}</div>
+          <small className="input-help">複数の備品に数字を入力して、まとめて保存できます。移動しない備品は0のままにしてください。</small>
           <label>{mode === "adjust" ? "変更理由" : "メモ"}<span className="optional">任意</span><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} maxLength={200} placeholder={mode === "adjust" ? "例：準備前の初期登録・現地で数え直したため" : "例：クラス企画で使用するため"}/></label>
         </>}
       </fieldset>

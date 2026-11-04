@@ -106,6 +106,8 @@ test('Google allowlist protects both inventory RPCs',async t=>{
   await change({type:'reorder_place',from:firstPlace,to:secondPlace}); state=await read(); assert.deepEqual(state.data.places.slice(0,2).map(p=>p.id),[secondPlace,firstPlace]);
   const firstItem=state.data.items[0].id, secondItem=state.data.items[1].id;
   await change({type:'reorder_item',from:firstItem,to:secondItem}); state=await read(); assert.deepEqual(state.data.items.slice(0,2).map(i=>i.id),[secondItem,firstItem]);
+  await change({type:'batch',operation:'adjust',from:'gym',entries:[{item:'chair',quantity:12},{item:'tent',quantity:4}],note:'一括設定'}); state=await read(); assert.equal(state.data.counts.gym.chair,12);assert.equal(state.data.counts.gym.tent,4);
+  await change({type:'batch',operation:'transfer',from:'gym',to:'classroom',entries:[{item:'chair',quantity:5},{item:'tent',quantity:2}],note:'一括移動'}); state=await read(); assert.equal(state.data.counts.gym.chair,7);assert.equal(state.data.counts.classroom.chair,5);assert.equal(state.data.counts.gym.tent,2);assert.equal(state.data.counts.classroom.tent,2);
   await change({type:'targets',targets:{storage:{desk:5,chair:10},gym:{desk:2},classroom:{}}}); state=await read(); assert.equal(state.data.targets.storage.desk,5);assert.equal(state.data.targets.gym.desk,2);
   await assert.rejects(change({type:'delete_item',item:'desk'}),{code:'PT400'});
   await change({type:'adjust',item:'desk',from:'storage',quantity:0,note:'削除前確認'}); state=await read();
