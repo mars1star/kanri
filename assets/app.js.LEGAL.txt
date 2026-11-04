@@ -68,10 +68,8 @@ lucide-react/dist/esm/context.mjs:
 lucide-react/dist/esm/Icon.mjs:
 lucide-react/dist/esm/createLucideIcon.mjs:
 lucide-react/dist/esm/icons/arrow-down-to-line.mjs:
-lucide-react/dist/esm/icons/arrow-down.mjs:
 lucide-react/dist/esm/icons/arrow-left-right.mjs:
 lucide-react/dist/esm/icons/arrow-right.mjs:
-lucide-react/dist/esm/icons/arrow-up.mjs:
 lucide-react/dist/esm/icons/boxes.mjs:
 lucide-react/dist/esm/icons/check.mjs:
 lucide-react/dist/esm/icons/chevron-left.mjs:
@@ -79,6 +77,7 @@ lucide-react/dist/esm/icons/chevron-right.mjs:
 lucide-react/dist/esm/icons/circle-user.mjs:
 lucide-react/dist/esm/icons/clipboard-list.mjs:
 lucide-react/dist/esm/icons/clock-3.mjs:
+lucide-react/dist/esm/icons/grip-vertical.mjs:
 lucide-react/dist/esm/icons/layout-grid.mjs:
 lucide-react/dist/esm/icons/map-pin.mjs:
 lucide-react/dist/esm/icons/package.mjs:
