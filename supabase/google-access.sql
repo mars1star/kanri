@@ -126,9 +126,8 @@ begin
  elsif kind='delete_place' then
   select v into source from jsonb_array_elements(places) v where v->>'id'=change->>'from';
   if source is null then raise sqlstate 'PT400' using message='場所が見つかりません。'; end if;
-  if exists(select 1 from jsonb_each_text(coalesce(counts->(source->>'id'),'{}'::jsonb)) e where e.value::integer<>0) then raise sqlstate 'PT400' using message='個数が残っている場所は削除できません。先に0にしてください。'; end if;
   select coalesce(jsonb_agg(v),'[]'::jsonb) into places from jsonb_array_elements(places) v where v->>'id'<>source->>'id'; counts=counts-(source->>'id'); targets=targets-(source->>'id');
-  detail=jsonb_build_object('type',kind,'title',(source->>'name')||'を削除','description','場所を削除しました');
+  detail=jsonb_build_object('type',kind,'title',(source->>'name')||'を削除','description','場所と、その場所に登録されていた個数を削除しました');
  elsif kind='delete_item' then
   select v into item from jsonb_array_elements(items) v where v->>'id'=change->>'item';
   if item is null then raise sqlstate 'PT400' using message='備品が見つかりません。'; end if;
@@ -182,6 +181,7 @@ begin
  end if;
  update public.festival_inventory set data=jsonb_build_object('places',places,'items',items,'counts',counts,'targets',targets),revision=revision+1 where id=1;
  insert into public.festival_activity(id,revision,actor_id,actor_name,request,details) values(request_id,state.revision+1,auth.uid(),actor,p_request,detail);
+ delete from public.festival_activity where revision <= state.revision-999;
  return jsonb_build_object('ok',true);
 end $$;
 revoke all on function public.festival_snapshot() from public,anon;
