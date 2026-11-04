@@ -140,7 +140,7 @@ begin
  end if;
  update public.festival_inventory set data=jsonb_build_object('places',places,'items',items,'counts',counts,'targets',targets),revision=revision+1 where id=1;
  insert into public.festival_activity(id,revision,actor_id,actor_name,request,details) values(request_id,state.revision+1,auth.uid(),actor,p_request,detail);
- delete from public.festival_activity where revision <= state.revision-999;
+ delete from public.festival_activity where created_at < now()-interval '2 days' or revision <= state.revision-999;
  return jsonb_build_object('ok',true);
 end $$;
 

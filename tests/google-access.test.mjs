@@ -85,6 +85,17 @@ test('Google allowlist protects both inventory RPCs',async t=>{
   assert.equal(online.length,1);assert.equal(online[0].name,'Google 本名');assert.equal(online[0].method,'google');
   await assert.rejects(()=>db.query('select * from public.festival_presence_state'),{code:'42501'});
  });
+ await t.test('2日を過ぎた履歴は画面更新時に自動削除',async()=>{
+  await claims();await identity();
+  await db.exec('reset role');
+  await db.query("update public.festival_activity set created_at=now()-interval '3 days' where revision=(select min(revision) from public.festival_activity)");
+  await db.exec('set role authenticated');
+  await read();
+  await db.exec('reset role');
+  const old=(await db.query("select count(*)::int as count from public.festival_activity where created_at < now()-interval '2 days'")).rows[0].count;
+  assert.equal(old,0);
+  await db.exec('set role authenticated');
+ });
  await t.test('目標数を保存し、確認後は個数が残る場所も安全に削除',async()=>{
   await claims();await identity();
   let state=await read();

@@ -45,6 +45,7 @@ begin
  if auth.uid() is null then raise sqlstate 'PT401' using message='ログインしてください。'; end if;
  member=public.festival_google_member();
  select * into strict state from public.festival_inventory where id=1;
+ delete from public.festival_activity where created_at < now()-interval '2 days';
  select coalesce(jsonb_agg(jsonb_build_object('id',h.id,'actor',h.actor_name,'detail',h.details,'at',h.created_at) order by h.revision desc),'[]'::jsonb)
  into history from (select * from public.festival_activity where revision<=state.revision order by revision desc limit 100) h;
  return jsonb_build_object('data',state.data,'revision',state.revision,'history',history,'user',jsonb_build_object('name',member.display_name));
@@ -181,7 +182,7 @@ begin
  end if;
  update public.festival_inventory set data=jsonb_build_object('places',places,'items',items,'counts',counts,'targets',targets),revision=revision+1 where id=1;
  insert into public.festival_activity(id,revision,actor_id,actor_name,request,details) values(request_id,state.revision+1,auth.uid(),actor,p_request,detail);
- delete from public.festival_activity where revision <= state.revision-999;
+ delete from public.festival_activity where created_at < now()-interval '2 days' or revision <= state.revision-999;
  return jsonb_build_object('ok',true);
 end $$;
 revoke all on function public.festival_snapshot() from public,anon;
