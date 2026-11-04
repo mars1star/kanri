@@ -146,7 +146,7 @@ export default function Home() {
   const overview = data?.items.find(i => i.id === overviewItem);
   return <div className="shell">
     <aside className="sidebar">
-      <a href="./" className="brand"><span className="brand-icon"><Boxes size={24}/></span><span>モノの居場所<small>文化祭 備品管理</small></span></a>
+      <a href="./" className="brand"><span className="brand-icon"><Boxes size={24}/></span><span>管理システム<small>文化祭 備品管理</small></span></a>
       <div className="workspace-tag"><span className="tiny-dot"/> CULTURE FESTIVAL <span className="tag">運営</span></div>
       <div className="nav-label">WORKSPACE</div>
       <nav aria-label="メインメニュー">
@@ -156,7 +156,7 @@ export default function Home() {
         <button className={tab === "online" ? "selected" : ""} onClick={() => setTab("online")}><Users size={19}/>ログイン中{onlineUsers.length>0&&<span className="online-count">{onlineUsers.length}</span>}</button>
         <button className={tab === "profile" ? "selected" : ""} onClick={() => setTab("profile")}><UserCircle size={19}/>プロフィール</button>
       </nav>
-      <div className="sidebar-bottom"><span className="avatar">祭</span><span>文化祭 備品管理</span></div>
+      <div className="sidebar-bottom"><span className="avatar">祭</span><span>管理システム</span></div>
     </aside>
     <div className="main-wrap">
       <header className="topbar"><span><b>{tab === "inventory" ? "備品" : tab === "history" ? "履歴" : tab === "settings" ? "設定" : tab === "online" ? "ログイン中" : "プロフィール"}</b></span><div className={`sync ${error ? "offline" : ""}`}><i/>{error ? "接続エラー" : snapshot ? "同期中" : "ログイン前"}</div>{signedIn && <button className="profile-shortcut" onClick={() => setTab("profile")}><UserCircle size={18}/>{snapshot?.user.name}</button>}</header>
@@ -183,7 +183,7 @@ export default function Home() {
         {data && tab === "settings" && <div className="settings-grid"><section className="settings-panel"><div className="section-heading"><h2><MapPin size={20}/>管理する場所</h2><button className="small-button" onClick={() => open("place")}><Plus size={16}/>追加</button></div><label className="search settings-search"><Search size={16}/><input value={settingsPlaceQuery} onChange={e=>setSettingsPlaceQuery(e.target.value)} placeholder="場所を検索"/></label><div className="settings-list">{data.places.filter(p=>p.name.includes(settingsPlaceQuery)).map(p => <div className="setting-row" key={p.id}><span>{p.name}</span><button className="danger-icon" disabled={busy} onClick={()=>{if(confirm(`${p.name}を削除しますか？`))void quickChange({type:'delete_place',from:p.id},'場所を削除しました。')}} aria-label={`${p.name}を削除`}><Trash2 size={17}/></button></div>)}</div></section><section className="settings-panel"><div className="section-heading"><h2><Package size={20}/>管理する備品</h2><span className="setting-head-actions"><button className="small-button" onClick={()=>open('targets')}><Target size={16}/>目標をまとめて設定</button><button className="small-button" onClick={() => open("item")}><Plus size={16}/>追加</button></span></div><label className="search settings-search"><Search size={16}/><input value={settingsItemQuery} onChange={e=>setSettingsItemQuery(e.target.value)} placeholder="備品を検索"/></label><div className="settings-list">{data.items.filter(i=>i.name.includes(settingsItemQuery)).map(i => <div className="setting-row" key={i.id}><span><b>{i.name}</b><small>{i.unit}</small></span><span className="setting-actions"><button onClick={()=>open('target',data.places[0]?.id,i.id)}><Target size={16}/>目標</button><button className="danger-icon" disabled={busy} onClick={()=>{if(confirm(`${i.name}を削除しますか？`))void quickChange({type:'delete_item',item:i.id},'備品を削除しました。')}} aria-label={`${i.name}を削除`}><Trash2 size={17}/></button></span></div>)}</div></section></div>}
         {data && tab === "online" && <section className="online-panel"><div className="online-summary"><span className="online-pulse"/><strong>{onlineUsers.length}人がログイン中</strong><button className="small-button" onClick={()=>void refresh()}><RefreshCw size={16}/>更新</button></div><div className="online-list">{onlineUsers.map(user=><div className="online-user" key={user.id}><span className="online-avatar"><UserCircle size={24}/></span><div><strong>{user.name}</strong><p>{user.method==='google'?'Google学校アカウント':'非常用アカウント'}</p></div><time dateTime={user.seenAt}>オンライン</time></div>)}</div><p className="online-note">画面を閉じた利用者は約2分後に一覧から消えます。</p></section>}
         {data && tab === "profile" && <section className="profile-card"><span className="profile-avatar"><UserCircle size={42}/></span><div><h2>{snapshot?.user.name}</h2><p>{googleUser?'Google学校アカウント':'非常用アカウント'}</p></div><dl><div><dt>権限</dt><dd>在庫の閲覧・更新</dd></div><div><dt>最終同期</dt><dd>{updated||'確認中'}</dd></div></dl><button className="danger-outline" onClick={async()=>{const r=await supabase?.auth.signOut({scope:'local'});if(r?.error)setError('ログアウトできませんでした。');}}>ログアウト</button></section>}
-        <footer>文化祭 備品管理</footer>
+        <footer>管理システム</footer>
       </main>
     </div>
     {toast && <div className="toast" role="status"><Check size={19}/>{toast}</div>}
