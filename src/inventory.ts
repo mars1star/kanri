@@ -4,7 +4,7 @@ export type Floor = "1F" | "2F" | "3F" | "4F";
 export type Place = Entry & { floor?: Floor };
 export type Inventory = { places: Place[]; items: Item[]; counts: Record<string, Record<string, number>>; targets?: Record<string, Record<string, number>> };
 export type Change = {
-  type: "transfer" | "adjust" | "place" | "item" | "delete_place" | "delete_item" | "target" | "targets" | "place_floor";
+  type: "transfer" | "adjust" | "place" | "item" | "delete_place" | "delete_item" | "target" | "targets" | "place_floor" | "reorder_place" | "reorder_item";
   item?: string; from?: string; to?: string; quantity?: number;
   name?: string; unit?: string; note?: string; floor?: Floor | ""; targets?: Record<string, Record<string, number>>;
 };
@@ -37,6 +37,15 @@ export function applyChange(original: Inventory, change: Change, id: string): { 
     if (!place || !["", "1F", "2F", "3F", "4F"].includes(change.floor ?? "")) throw new Error("場所と階を確認してください。");
     if (change.floor) place.floor = change.floor; else delete place.floor;
     return { data, detail: { type: change.type, title: `${place.name}の階を設定`, description: change.floor ? `${change.floor}に設定しました` : "階の設定を解除しました" } };
+  }
+  if (change.type === "reorder_place" || change.type === "reorder_item") {
+    const list = change.type === "reorder_place" ? data.places : data.items;
+    const fromIndex = list.findIndex(e => e.id === change.from);
+    const toIndex = list.findIndex(e => e.id === change.to);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) throw new Error("並び替える項目を確認してください。");
+    const movedName = list[fromIndex].name;
+    [list[fromIndex], list[toIndex]] = [list[toIndex], list[fromIndex]];
+    return { data, detail: { type: change.type, title: "表示順を変更", description: `${movedName}の表示順を変更しました` } };
   }
   if (change.type !== "transfer" && change.type !== "adjust") throw new Error("操作が正しくありません。");
   const item = data.items.find(e => e.id === change.item);

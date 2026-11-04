@@ -68,8 +68,10 @@ lucide-react/dist/esm/context.mjs:
 lucide-react/dist/esm/Icon.mjs:
 lucide-react/dist/esm/createLucideIcon.mjs:
 lucide-react/dist/esm/icons/arrow-down-to-line.mjs:
+lucide-react/dist/esm/icons/arrow-down.mjs:
 lucide-react/dist/esm/icons/arrow-left-right.mjs:
 lucide-react/dist/esm/icons/arrow-right.mjs:
+lucide-react/dist/esm/icons/arrow-up.mjs:
 lucide-react/dist/esm/icons/boxes.mjs:
 lucide-react/dist/esm/icons/check.mjs:
 lucide-react/dist/esm/icons/chevron-left.mjs:

@@ -28,7 +28,7 @@ begin
   raise sqlstate 'PT403' using message='許可された方法でログインし直してください。';
  end if;
  change=p_request->'change'; kind=change->>'type';
- if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer','target','targets','delete_place','delete_item','place_floor') then
+ if jsonb_typeof(change) is distinct from 'object' or kind is null or kind not in ('item','place','adjust','transfer','target','targets','delete_place','delete_item','place_floor','reorder_place','reorder_item') then
   raise sqlstate 'PT400' using message='操作が正しくありません。'; end if;
  -- 行ロックで同時操作を直列化。個数の更新と履歴保存は同一トランザクション。
  select * into strict state from public.festival_inventory where id=1 for update;
@@ -63,6 +63,23 @@ begin
   select coalesce(jsonb_agg(case when v->>'id'=source->>'id' then case when floor='' then v-'floor' else v||jsonb_build_object('floor',floor) end else v end),'[]'::jsonb)
   into places from jsonb_array_elements(places) v;
   detail=jsonb_build_object('type',kind,'title',(source->>'name')||'の階を設定','description',case when floor='' then '階の設定を解除しました' else floor||'に設定しました' end);
+ elsif kind in ('reorder_place','reorder_item') then
+  if kind='reorder_place' then
+   select v into source from jsonb_array_elements(places) v where v->>'id'=change->>'from';
+   select v into destination from jsonb_array_elements(places) v where v->>'id'=change->>'to';
+   if source is null or destination is null or source->>'id'=destination->>'id' then raise sqlstate 'PT400' using message='並び替える場所を確認してください。'; end if;
+   select jsonb_agg(case when v->>'id'=source->>'id' then destination when v->>'id'=destination->>'id' then source else v end order by ord)
+   into places from jsonb_array_elements(places) with ordinality a(v,ord);
+   name=source->>'name';
+  else
+   select v into item from jsonb_array_elements(items) v where v->>'id'=change->>'from';
+   select v into destination from jsonb_array_elements(items) v where v->>'id'=change->>'to';
+   if item is null or destination is null or item->>'id'=destination->>'id' then raise sqlstate 'PT400' using message='並び替える備品を確認してください。'; end if;
+   select jsonb_agg(case when v->>'id'=item->>'id' then destination when v->>'id'=destination->>'id' then item else v end order by ord)
+   into items from jsonb_array_elements(items) with ordinality a(v,ord);
+   name=item->>'name';
+  end if;
+  detail=jsonb_build_object('type',kind,'title','表示順を変更','description',name||'の表示順を変更しました');
  elsif kind='delete_place' then
   select v into source from jsonb_array_elements(places) v where v->>'id'=change->>'from';
   if source is null then raise sqlstate 'PT400' using message='場所が見つかりません。'; end if;
