@@ -4,6 +4,7 @@ import { ArrowDownToLine, ArrowLeftRight, ArrowRight, Boxes, Check, ChevronLeft,
 import { countAt, type Change, type Detail, type Floor, type Inventory } from "./inventory";
 import { ApiError, configured, inventoryRequest, presenceRequest, supabase } from './api';
 import SignIn from './SignIn';
+import { buildTargetUpdate, buildBatchEntries } from './bulkDraft';
 
 type Snapshot = { data: Inventory; revision: number; history: { id: string; actor: string; detail: Detail; at: string }[]; user: { name: string; email: string } };
 type OnlineUser = { id: string; name: string; method: string; seenAt: string };
@@ -38,7 +39,7 @@ export default function Home() {
   const [note, setNote] = useState("");
   const [overviewItem, setOverviewItem] = useState("");
   const [targetView, setTargetView] = useState<"place" | "all">("all");
-  const [targetDraft, setTargetDraft] = useState<Record<string,Record<string,number>>>({});
+  const [targetDraft, setTargetDraft] = useState<Record<string,Record<string,string>>>({});
   const [batchDraft, setBatchDraft] = useState<Record<string,string>>({});
   const [bulkText, setBulkText] = useState("");
   const [formError, setFormError] = useState("");
@@ -96,10 +97,10 @@ export default function Home() {
     setFrom(selectedFrom); setItem(selectedItem);
     setTo(snapshot.data.places.find(p => p.id !== selectedFrom)?.id || "");
     setQuantity(next === "adjust" ? String(countAt(snapshot.data, selectedFrom, selectedItem)) : next === "target" ? String(snapshot.data.targets?.[selectedFrom]?.[selectedItem] ?? 0) : "1");
-    if(next==="adjust") setBatchDraft(Object.fromEntries(snapshot.data.items.map(i=>[i.id,String(countAt(snapshot.data,selectedFrom,i.id))])));
+    if(next==="adjust") setBatchDraft({});
     if(next==="transfer") setBatchDraft(Object.fromEntries(snapshot.data.items.map(i=>[i.id,"0"])));
     if(next==="targets") {
-      setTargetDraft(structuredClone(snapshot.data.targets||{}));
+      setTargetDraft({});
       setTargetView(place ? "place" : "all");
     }
     setNote(""); setBulkText(""); setFormError(""); setUncertain(false); pending.current = null; setMode(next);
@@ -109,14 +110,18 @@ export default function Home() {
     event.preventDefault();
     if (!snapshot || !mode || busy) return;
     setBusy(true); setFormError("");
+    try {
     const enteredQuantity = parseCountText(quantity);
-    const batchEntries=data?.items.flatMap(i=>{const value=parseCountText(batchDraft[i.id]??"");return mode==="transfer"?(value>0?[{item:i.id,quantity:value}]:[]):value!==countAt(data,from,i.id)?[{item:i.id,quantity:value}]:[]})||[];
+    const batchEntries = mode === "adjust" || mode === "transfer" ? buildBatchEntries(snapshot.data, from, batchDraft, mode) : [];
+    const targetUpdate = mode === "targets" ? buildTargetUpdate(snapshot.data, targetDraft) : null;
+    if (!pending.current && ((mode === "targets" && !targetUpdate?.changed) || ((mode === "adjust" || mode === "transfer") && !batchEntries.length))) {
+      throw new Error("変更する項目に数字を入力してください。空欄は変更されません。");
+    }
     const additions=bulkText.split(/\r?\n/).map(v=>v.trim()).filter(Boolean).map(line=>{const [entryName,entryUnit]=line.split(/[,、\t]/).map(v=>v.trim());return {name:entryName,unit:entryUnit||"個"}});
-    const change: Change = mode === "place"||mode === "item" ? {type:"bulk_add",category:mode,additions} : mode === "targets" ? { type: mode, targets: targetDraft } : mode === "target" ? { type: mode, item, from, quantity: enteredQuantity } : { type:"batch", operation:mode, entries:batchEntries, from, to, note };
+    const change: Change = mode === "place"||mode === "item" ? {type:"bulk_add",category:mode,additions} : mode === "targets" ? { type: mode, targets: targetUpdate!.targets } : mode === "target" ? { type: mode, item, from, quantity: enteredQuantity } : { type:"batch", operation:mode, entries:batchEntries, from, to, note };
     // The server ignores this value for Google sessions and derives the verified Google profile name itself.
     const body = pending.current || { id: crypto.randomUUID(), revision: formRevision.current ?? snapshot.revision, actor: actor.trim(), change };
     pending.current = body;
-    try {
       await inventoryRequest(body);
       try { localStorage.setItem("festival-actor", actor.trim()); } catch {}
       pending.current = null; setUncertain(false); setMode(null);
@@ -208,12 +213,12 @@ export default function Home() {
       <fieldset disabled={busy || uncertain}>
         <label>履歴に表示する名前<span className="required">必須</span><input value={actor} onChange={e => setActor(e.target.value)} placeholder="例：2年A組 山田" required maxLength={40} autoComplete="name" readOnly={googleUser}/><small className="locked-name">{googleUser ? "Googleアカウントの氏名を使用します（変更不可）" : "非常用ログインとして履歴に記録されます"}</small></label>
         {(mode === "item" || mode === "place") ? <label>{mode === "place" ? "場所をまとめて追加" : "備品をまとめて追加"}<textarea autoComplete="off" value={bulkText} onChange={e=>setBulkText(e.target.value)} rows={8} placeholder={mode === "place" ? "1行に1か所\n例：1年A組\n体育館\n中庭" : "1行に「名前,単位」\n例：長机,台\nパイプ椅子,脚\nテント,張"} required/><small className="input-help">最大50件まで一度に追加できます。</small></label> : mode === "targets" ? <>
-          <div className="target-editor-tools"><div className="target-view-switch" aria-label="目標の入力方法"><button type="button" aria-pressed={targetView==="place"} onClick={()=>setTargetView("place")}>場所ごとに入力</button><button type="button" aria-pressed={targetView==="all"} onClick={()=>setTargetView("all")}>全場所の一覧</button></div><p className="input-help">複数の備品・場所を編集して、最後にまとめて保存できます。</p></div>
-          {targetView === "place" ? <><label>目標を設定する場所<select value={from} onChange={e=>setFrom(e.target.value)}>{data.places.map(p=><option key={p.id} value={p.id}>{p.floor ? `${p.floor} / ` : ""}{p.name}</option>)}</select></label><div className="batch-list target-place-list"><div className="batch-head"><b>備品</b><b>現在</b><b>目標数</b></div>{data.items.map(i=><label className="batch-row" key={i.id}><span>{i.name}<small>{i.unit}</small></span><span>{countAt(data,from,i.id)}{i.unit}</span><input type="number" inputMode="numeric" min="0" max="99999" step="1" required value={targetDraft[from]?.[i.id]??0} onChange={e=>setTargetDraft(old=>({...old,[from]:{...(old[from]||{}),[i.id]:Number(e.target.value)}}))} aria-label={`${data.places.find(p=>p.id===from)?.name}の${i.name}目標`}/></label>)}</div></> : <div className="target-matrix" style={{'--matrix-cols':data.items.length} as CSSProperties}><div className="matrix-row matrix-head"><b>場所</b>{data.items.map(i=><b key={i.id}>{i.name}<small>{i.unit}</small></b>)}</div>{data.places.map(p=><div className="matrix-row" key={p.id}><strong>{p.name}</strong>{data.items.map(i=><input key={i.id} aria-label={`${p.name}の${i.name}目標`} type="number" min="0" max="99999" step="1" value={targetDraft[p.id]?.[i.id]??0} onChange={e=>setTargetDraft(old=>({...old,[p.id]:{...(old[p.id]||{}),[i.id]:Math.max(0,Math.min(99999,Number(e.target.value)||0))}}))}/>)}</div>)}</div>}
+          <div className="target-editor-tools"><div className="target-view-switch" aria-label="目標の入力方法"><button type="button" aria-pressed={targetView==="place"} onClick={()=>setTargetView("place")}>場所ごとに入力</button><button type="button" aria-pressed={targetView==="all"} onClick={()=>setTargetView("all")}>全場所の一覧</button></div><p className="input-help">空欄は変更なし。数字を入れた項目だけ更新します。0にする場合は「0」を入力してください。</p></div>
+          {targetView === "place" ? <><label>目標を設定する場所<select value={from} onChange={e=>setFrom(e.target.value)}>{data.places.map(p=><option key={p.id} value={p.id}>{p.floor ? `${p.floor} / ` : ""}{p.name}</option>)}</select></label><div className="batch-list target-place-list"><div className="batch-head"><b>備品</b><b>現在の目標</b><b>新しい目標</b></div>{data.items.map(i=><label className="batch-row" key={i.id}><span>{i.name}<small>{i.unit}</small></span><span>{targetAt(from,i.id)}{i.unit}</span><input type="text" inputMode="numeric" pattern="[0-9０-９,]*" maxLength={7} placeholder="変更なし" value={targetDraft[from]?.[i.id]??""} onChange={e=>setTargetDraft(old=>({...old,[from]:{...(old[from]||{}),[i.id]:e.target.value}}))} aria-label={`${data.places.find(p=>p.id===from)?.name}の${i.name}目標`}/></label>)}</div></> : <div className="target-matrix" style={{'--matrix-cols':data.items.length} as CSSProperties}><div className="matrix-row matrix-head"><b>場所</b>{data.items.map(i=><b key={i.id}>{i.name}<small>{i.unit}</small></b>)}</div>{data.places.map(p=><div className="matrix-row" key={p.id}><strong>{p.name}</strong>{data.items.map(i=><input key={i.id} aria-label={`${p.name}の${i.name}目標`} type="text" inputMode="numeric" pattern="[0-9０-９,]*" maxLength={7} placeholder="変更なし" title={`現在の目標：${targetAt(p.id,i.id)}${i.unit}`} value={targetDraft[p.id]?.[i.id]??""} onChange={e=>setTargetDraft(old=>({...old,[p.id]:{...(old[p.id]||{}),[i.id]:e.target.value}}))}/>)}</div>)}</div>}
         </> : mode === "target" ? <><label>場所<select value={from} onChange={e=>{setFrom(e.target.value);setQuantity(String(data.targets?.[e.target.value]?.[item]??0))}}>{data.places.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>備品<select value={item} onChange={e=>{setItem(e.target.value);setQuantity(String(data.targets?.[from]?.[e.target.value]??0))}}>{data.items.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select></label><label>この場所の目標数<input type="number" min="0" max="99999" step="1" required value={quantity} onChange={e=>setQuantity(e.target.value)}/></label></> : <>
-          <div className={mode === "transfer" ? "route-fields" : ""}><label>{mode === "transfer" ? "移動元" : "場所"}<select value={from} onChange={e => {setFrom(e.target.value);setBatchDraft(Object.fromEntries(data.items.map(i=>[i.id,mode==='adjust'?String(countAt(data,e.target.value,i.id)):'0'])));if(e.target.value===to)setTo(data.places.find(p=>p.id!==e.target.value)?.id||'')}}>{data.places.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{mode === "transfer" && <><ArrowRight size={18}/><label>移動先<select value={to} onChange={e => setTo(e.target.value)} required><option value="" disabled>選択してください</option>{data.places.filter(p => p.id !== from).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></>}</div>
-          <div className="batch-list"><div className="batch-head"><b>備品</b><b>現在</b><b>{mode==='transfer'?'移動数':'設定後'}</b></div>{data.items.map(i=><label className="batch-row" key={i.id}><span>{i.name}<small>{i.unit}</small></span><span>{countAt(data,from,i.id)}{i.unit}</span><input type="text" inputMode="numeric" pattern="[0-9０-９,]*" maxLength={6} value={batchDraft[i.id]??''} onChange={e=>setBatchDraft(old=>({...old,[i.id]:e.target.value}))} aria-label={`${i.name}の${mode==='transfer'?'移動数':'個数'}`}/></label>)}</div>
-          <small className="input-help">複数の備品に数字を入力して、まとめて保存できます。移動しない備品は0のままにしてください。</small>
+          <div className={mode === "transfer" ? "route-fields" : ""}><label>{mode === "transfer" ? "移動元" : "場所"}<select value={from} onChange={e => {setFrom(e.target.value);setBatchDraft(Object.fromEntries(data.items.map(i=>[i.id,mode==='adjust'?'':'0'])));if(e.target.value===to)setTo(data.places.find(p=>p.id!==e.target.value)?.id||'')}}>{data.places.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{mode === "transfer" && <><ArrowRight size={18}/><label>移動先<select value={to} onChange={e => setTo(e.target.value)} required><option value="" disabled>選択してください</option>{data.places.filter(p => p.id !== from).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label></>}</div>
+          <div className="batch-list"><div className="batch-head"><b>備品</b><b>現在</b><b>{mode==='transfer'?'移動数':'設定後'}</b></div>{data.items.map(i=><label className="batch-row" key={i.id}><span>{i.name}<small>{i.unit}</small></span><span>{countAt(data,from,i.id)}{i.unit}</span><input type="text" inputMode="numeric" pattern="[0-9０-９,]*" maxLength={7} placeholder={mode==='adjust'?"変更なし":"0"} value={batchDraft[i.id]??''} onChange={e=>setBatchDraft(old=>({...old,[i.id]:e.target.value}))} aria-label={`${i.name}の${mode==='transfer'?'移動数':'個数'}`}/></label>)}</div>
+          <small className="input-help">{mode==='adjust'?'空欄は変更なし。数字を入れた備品だけ更新します。0にする場合は「0」を入力してください。':'複数の備品の移動数をまとめて保存できます。移動しない備品は0または空欄にしてください。'}</small>
           <label>{mode === "adjust" ? "変更理由" : "メモ"}<span className="optional">任意</span><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} maxLength={200} placeholder={mode === "adjust" ? "例：準備前の初期登録・現地で数え直したため" : "例：クラス企画で使用するため"}/></label>
         </>}
       </fieldset>
